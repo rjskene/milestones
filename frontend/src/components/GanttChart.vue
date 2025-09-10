@@ -742,6 +742,7 @@ const loadData = async () => {
   try {
     if (viewMode.value === 'projects') {
       const data = await projectStore.getProjectTimeline(selectedId.value)
+      console.log('Project timeline data:', data)
       chartData.value = data
     } else {
       const data = await equipmentStore.getEquipmentSaleSchedule(selectedId.value)
@@ -1125,39 +1126,78 @@ const createGanttChart = () => {
   
   const startDate = new Date(dataToUse.start_date || dataToUse.project_start_date)
 
-  // Prepare data for Highcharts Gantt
-  const seriesData = milestones.map((milestone, index) => {
-    const startDateMs = new Date(startDate.getTime() + (milestone.start_days || 0) * 24 * 60 * 60 * 1000)
-    const endDateMs = new Date(startDate.getTime() + (milestone.end_days || 0) * 24 * 60 * 60 * 1000)
+  // Group milestones by equipment sale
+  const groupedBySale = {}
+  milestones.forEach((milestone, index) => {
+    const saleId = milestone.sale_id || 'standalone'
+    const saleName = milestone.sale_name || 'Standalone Sale'
     
-    // Validate dates
-    if (isNaN(startDateMs.getTime()) || isNaN(endDateMs.getTime())) {
-      console.warn('Invalid milestone dates:', milestone)
-      return null
+    if (!groupedBySale[saleId]) {
+      groupedBySale[saleId] = {
+        saleId: saleId,
+        saleName: saleName,
+        milestones: []
+      }
     }
+    groupedBySale[saleId].milestones.push({ ...milestone, originalIndex: index })
+  })
 
+  // Create series data in the correct Highcharts Gantt format
+  const series = Object.values(groupedBySale).map((saleGroup) => {
+    const saleParentId = `sale-${saleGroup.saleId}`
+    
+    // Create the series data array starting with the parent equipment sale
+    const seriesData = [
+      {
+        name: saleGroup.saleName,
+        id: saleParentId,
+        pointWidth: 3, // Smaller width for parent task
+        color: '#95a5a6' // Gray color for parent rows
+      }
+    ]
+    
+    // Add milestones as children with parent references
+    saleGroup.milestones.forEach((milestone) => {
+      const startDateMs = new Date(startDate.getTime() + (milestone.start_days || 0) * 24 * 60 * 60 * 1000)
+      const endDateMs = new Date(startDate.getTime() + (milestone.end_days || 0) * 24 * 60 * 60 * 1000)
+      
+      // Validate dates
+      if (isNaN(startDateMs.getTime()) || isNaN(endDateMs.getTime())) {
+        console.warn('Invalid milestone dates:', milestone)
+        return
+      }
+
+      seriesData.push({
+        parent: saleParentId,
+        id: `milestone-${milestone.milestone_id || milestone.id}`,
+        name: milestone.milestone_name || milestone.name,
+        start: startDateMs.getTime(),
+        end: endDateMs.getTime(),
+        completed: {
+          amount: 0 // No completion tracking for now
+        },
+        color: getMilestoneColor(milestone.originalIndex),
+        saleName: milestone.sale_name || null,
+        milestoneData: milestone
+      })
+    })
+    
     return {
-      id: `milestone-${milestone.milestone_id || milestone.id}`,
-      name: milestone.milestone_name || milestone.name,
-      start: startDateMs.getTime(),
-      end: endDateMs.getTime(),
-      completed: {
-        amount: 0 // No completion tracking for now
-      },
-      color: getMilestoneColor(index),
-      saleName: milestone.sale_name || null
+      name: saleGroup.saleName,
+      data: seriesData
     }
-  }).filter(item => item !== null)
+  })
 
-  // Calculate dynamic height based on number of milestones
+  // Calculate dynamic height based on number of rows (sales + milestones)
   const baseHeight = 200
-  const heightPerMilestone = 50
-  const chartHeight = Math.max(baseHeight, milestones.length * heightPerMilestone)
+  const heightPerRow = 50
+  const totalRows = Object.keys(groupedBySale).length + milestones.length
+  const chartHeight = Math.max(baseHeight, totalRows * heightPerRow)
 
   // Create the chart
   ganttOptions.value = {
     title: {
-      text: viewMode.value === 'projects' ? 'Project Timeline' : 'Payment Milestone Timeline'
+      text: viewMode.value === 'projects' ? 'Project Timeline - Grouped by Equipment Sales' : 'Equipment Sale Timeline - Grouped by Milestones'
     },
     subtitle: {
       text: `${selectedItem.value.name} - Payment Schedule`
@@ -1180,46 +1220,45 @@ const createGanttChart = () => {
     },
     yAxis: {
       title: {
-        text: 'Milestones'
+        text: viewMode.value === 'projects' ? 'Equipment Sales & Milestones' : 'Milestones'
       }
     },
     tooltip: {
       formatter: function() {
-        const milestone = milestones.find(m => 
-          (m.milestone_name || m.name) === this.point.name
-        )
+        // Handle parent rows (equipment sales)
+        if (!this.point.start && !this.point.end) {
+          return `<b>${this.point.name}</b><br/>Equipment Sale`
+        }
+        
+        // Handle child rows (milestones)
+        const milestone = this.point.milestoneData
         if (!milestone) return ''
 
         const startDate = new Date(this.point.start)
         const endDate = new Date(this.point.end)
         
-        let tooltip = `
+        return `
+          <b>${milestone.sale_name}</b><br/>
           <b>${this.point.name}</b><br/>
           Start: ${startDate.toLocaleDateString()}<br/>
           End: ${endDate.toLocaleDateString()}<br/>
           Payment: ${formatCurrency(milestone.payment_amount)} (${milestone.payment_percentage}%)<br/>
           Due: ${formatDate(milestone.payment_due_date)}
         `
-        
-        if (viewMode.value === 'projects' && milestone.sale_name) {
-          tooltip = `<b>${milestone.sale_name}</b><br/>` + tooltip
-        }
-        
-        return tooltip
       }
     },
-    series: [{
-      name: 'Payment Milestones',
-      data: seriesData
-    }],
+    series: series,
     plotOptions: {
       gantt: {
         dataLabels: {
           enabled: true,
           formatter: function() {
-            const milestone = milestones.find(m => 
-              (m.milestone_name || m.name) === this.point.name
-            )
+            // Don't show labels on parent rows
+            if (!this.point.start && !this.point.end) {
+              return ''
+            }
+            
+            const milestone = this.point.milestoneData
             return milestone ? formatCurrency(milestone.payment_amount, '$', 0) : ''
           }
         }
