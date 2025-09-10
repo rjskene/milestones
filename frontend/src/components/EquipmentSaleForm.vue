@@ -221,12 +221,31 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMilestoneStore } from '../stores/milestoneStore'
 import { useEquipmentStore } from '../stores/equipmentStore'
 import { useProjectStore } from '../stores/projectStore'
 import MilestoneAssignmentModal from './MilestoneAssignmentModal.vue'
+
+// Define props
+const props = defineProps({
+  sale: {
+    type: Object,
+    default: null
+  },
+  isEditing: {
+    type: Boolean,
+    default: false
+  },
+  project: {
+    type: Object,
+    default: null
+  }
+})
+
+// Define emits
+const emit = defineEmits(['close', 'saved'])
 
 const router = useRouter()
 const milestoneStore = useMilestoneStore()
@@ -274,15 +293,46 @@ const resetForm = () => {
   formData.quantity = 1
   formData.total_amount = 0
   formData.milestone_structure_id = ''
-  formData.project = null
+  formData.project = props.project?.id || null
   formData.project_start_date = new Date().toISOString().split('T')[0]
   editingSale.value = null
   error.value = null
 }
 
+const initializeForm = () => {
+  if (props.isEditing && props.sale) {
+    // Editing existing sale
+    formData.name = props.sale.name || ''
+    formData.vendor = props.sale.vendor || ''
+    formData.sale_type = props.sale.sale_type || 'vendor'
+    formData.quantity = props.sale.quantity || 1
+    formData.total_amount = props.sale.total_amount || 0
+    formData.milestone_structure_id = props.sale.milestone_structure?.id || ''
+    formData.project = props.sale.project?.id || null
+    formData.project_start_date = props.sale.project_start_date || new Date().toISOString().split('T')[0]
+    editingSale.value = props.sale
+    showCreateForm.value = true
+  } else if (props.project) {
+    // Creating new sale with project context
+    formData.project = props.project.id
+    formData.project_start_date = props.project.start_date || new Date().toISOString().split('T')[0]
+    showCreateForm.value = true
+  } else {
+    // Creating new standalone sale
+    resetForm()
+    showCreateForm.value = true
+  }
+}
+
+// Watch for prop changes
+watch(() => [props.sale, props.isEditing, props.project], () => {
+  initializeForm()
+}, { immediate: true })
+
 const cancelForm = () => {
   showCreateForm.value = false
   resetForm()
+  emit('close')
 }
 
 const editSale = (sale) => {
@@ -326,6 +376,7 @@ const saveSale = async () => {
 
     await loadSales()
     cancelForm()
+    emit('saved')
   } catch (err) {
     error.value = err.response?.data?.detail || 'Failed to save equipment sale'
   } finally {

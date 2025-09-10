@@ -49,119 +49,6 @@
           <button @click="showMilestoneForm = true" class="btn-primary">
             Create Milestones
           </button>
-          <button @click="showQuickActions = !showQuickActions" class="btn-secondary">
-            Quick Actions
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quick Actions Panel -->
-    <div v-if="showQuickActions" class="quick-actions-panel">
-      <h3>Quick Actions</h3>
-      <div class="quick-actions-grid">
-        <div class="quick-action-card">
-          <h4>Projects</h4>
-          <div class="quick-actions">
-            <button @click="createProject" class="btn-primary">New Project</button>
-            <button @click="showProjectList = !showProjectList" class="btn-secondary">
-              {{ showProjectList ? 'Hide' : 'Show' }} All Projects
-            </button>
-          </div>
-        </div>
-        
-        <div class="quick-action-card">
-          <h4>Equipment Sales</h4>
-          <div class="quick-actions">
-            <button @click="createEquipmentSale" class="btn-primary">New Sale</button>
-            <button @click="showEquipmentList = !showEquipmentList" class="btn-secondary">
-              {{ showEquipmentList ? 'Hide' : 'Show' }} All Sales
-            </button>
-          </div>
-        </div>
-        
-        <div class="quick-action-card">
-          <h4>Milestone Structures</h4>
-          <div class="quick-actions">
-            <button @click="createMilestoneStructure" class="btn-primary">New Structure</button>
-            <button @click="showMilestoneList = !showMilestoneList" class="btn-secondary">
-              {{ showMilestoneList ? 'Hide' : 'Show' }} All Structures
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Project List -->
-    <div v-if="showProjectList" class="entity-list">
-      <h3>All Projects</h3>
-      <div class="entity-grid">
-        <div v-for="project in projects" :key="project.id" class="entity-card">
-          <div class="entity-header">
-            <h4>{{ project.name }}</h4>
-            <div class="entity-actions">
-              <button @click="editProject(project)" class="btn-edit">Edit</button>
-              <button @click="deleteProject(project)" class="btn-delete">Delete</button>
-              <button @click="selectProject(project)" class="btn-primary">View Schedule</button>
-            </div>
-          </div>
-          <div class="entity-details">
-            <p><strong>Start Date:</strong> {{ formatDate(project.start_date) }}</p>
-            <p><strong>Equipment Sales:</strong> {{ project.equipment_sales_count || 0 }}</p>
-            <p v-if="project.description"><strong>Description:</strong> {{ project.description }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Equipment Sales List -->
-    <div v-if="showEquipmentList" class="entity-list">
-      <h3>All Equipment Sales</h3>
-      <div class="entity-grid">
-        <div v-for="sale in equipmentSales" :key="sale.id" class="entity-card">
-          <div class="entity-header">
-            <h4>{{ sale.name }}</h4>
-            <div class="entity-actions">
-              <button @click="editEquipmentSale(sale)" class="btn-edit">Edit</button>
-              <button @click="deleteEquipmentSale(sale)" class="btn-delete">Delete</button>
-              <button @click="selectEquipmentSale(sale)" class="btn-primary">View Schedule</button>
-              <button v-if="!sale.milestone_structure" @click="assignMilestoneToSale(sale)" class="btn-secondary">
-                Assign Milestone
-              </button>
-            </div>
-          </div>
-          <div class="entity-details">
-            <p><strong>Vendor:</strong> {{ sale.vendor || 'N/A' }}</p>
-            <p><strong>Type:</strong> {{ sale.sale_type }}</p>
-            <p><strong>Quantity:</strong> {{ sale.quantity }}</p>
-            <p><strong>Total Amount:</strong> {{ formatCurrency(sale.total_amount) }}</p>
-            <p><strong>Milestone Structure:</strong> {{ sale.milestone_structure?.name || 'None' }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Milestone Structures List -->
-    <div v-if="showMilestoneList" class="entity-list">
-      <h3>All Milestone Structures</h3>
-      <div class="entity-grid">
-        <div v-for="structure in milestoneStructures" :key="structure.id" class="entity-card">
-          <div class="entity-header">
-            <h4>{{ structure.name }}</h4>
-            <div class="entity-actions">
-              <button @click="editMilestoneStructure(structure)" class="btn-edit">Edit</button>
-              <button @click="deleteMilestoneStructure(structure)" class="btn-delete">Delete</button>
-            </div>
-          </div>
-          <div class="entity-details">
-            <p v-if="structure.description"><strong>Description:</strong> {{ structure.description }}</p>
-            <div class="milestones-preview">
-              <strong>Milestones:</strong>
-              <div v-for="milestone in structure.milestones" :key="milestone.id" class="milestone-item">
-                <span>{{ milestone.name }} - {{ milestone.payment_percentage }}% ({{ milestone.days_after_previous }} days)</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -285,6 +172,14 @@
         <!-- Projects View - Horizontal Table -->
         <div v-else-if="viewMode === 'projects'" class="equipment-sales-table">
           <div class="sales-header">
+            <span class="checkbox-column">
+              <input 
+                type="checkbox" 
+                :checked="selectAllEquipmentSales" 
+                @change="toggleSelectAllEquipmentSales"
+                title="Select/Deselect All"
+              />
+            </span>
             <span>Sale Name</span>
             <span>Vendor</span>
             <span>Type</span>
@@ -295,10 +190,18 @@
             <span>Actions</span>
           </div>
           <div 
-            v-for="sale in selectedItem.equipment_sales" 
+            v-for="sale in equipmentSalesForProject" 
             :key="sale.id" 
             class="sales-row"
           >
+            <span class="checkbox-column">
+              <input 
+                type="checkbox" 
+                :checked="selectedEquipmentSalesIds.includes(sale.id)" 
+                @change="toggleEquipmentSaleSelection(sale.id)"
+                title="Select this sale"
+              />
+            </span>
             <span class="sale-name">{{ sale.name }}</span>
             <span>{{ sale.vendor || 'N/A' }}</span>
             <span>{{ sale.sale_type }}</span>
@@ -351,16 +254,16 @@
             <span>Actions</span>
           </div>
           <div 
-            v-for="milestone in chartData.milestone_schedule || chartData.project_timeline" 
+            v-for="milestone in (filteredChartData?.milestone_schedule || filteredChartData?.project_timeline || chartData?.milestone_schedule || chartData?.project_timeline || [])" 
             :key="`${milestone.sale_id || ''}-${milestone.milestone_id || milestone.id}`" 
             class="summary-row"
           >
-            <span class="milestone-name">{{ milestone.milestone_name || milestone.name }}</span>
-            <span v-if="viewMode === 'projects'" class="sale-name">{{ milestone.sale_name }}</span>
+            <span class="milestone-name">{{ milestone.milestone_name || milestone.name || 'Unnamed Milestone' }}</span>
+            <span v-if="viewMode === 'projects'" class="sale-name">{{ milestone.sale_name || 'Unknown Sale' }}</span>
             <span>{{ formatDate(milestone.due_date) }}</span>
             <span>{{ formatDate(milestone.payment_due_date) }}</span>
             <span class="amount">{{ formatCurrency(milestone.payment_amount) }}</span>
-            <span>{{ milestone.payment_percentage }}%</span>
+            <span>{{ milestone.payment_percentage || 0 }}%</span>
             <span class="milestone-actions">
               <button @click="editMilestoneDetails(milestone)" class="btn-edit-small" title="Edit milestone">
                 ✏️
@@ -576,8 +479,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useEquipmentStore } from '../stores/equipmentStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useMilestoneStore } from '../stores/milestoneStore'
@@ -587,6 +490,7 @@ import EquipmentSaleForm from './EquipmentSaleForm.vue'
 import MilestoneForm from './MilestoneForm.vue'
 
 const route = useRoute()
+const router = useRouter()
 const equipmentStore = useEquipmentStore()
 const projectStore = useProjectStore()
 const milestoneStore = useMilestoneStore()
@@ -596,6 +500,94 @@ const ganttOptions = ref(null)
 
 const viewMode = ref('projects') // 'single' or 'projects'
 const selectedId = ref('')
+
+// LocalStorage keys
+const STORAGE_KEYS = {
+  VIEW_MODE: 'gantt-chart-view-mode',
+  SELECTED_ID: 'gantt-chart-selected-id',
+  SELECTED_EQUIPMENT_SALES: 'gantt-chart-selected-equipment-sales'
+}
+
+// Persistence functions
+const saveToLocalStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, value)
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error)
+  }
+}
+
+const loadFromLocalStorage = (key, defaultValue = '') => {
+  try {
+    return localStorage.getItem(key) || defaultValue
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error)
+    return defaultValue
+  }
+}
+
+const saveSelectedEquipmentSales = () => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SELECTED_EQUIPMENT_SALES, JSON.stringify(selectedEquipmentSalesIds.value))
+  } catch (error) {
+    console.warn('Failed to save selected equipment sales:', error)
+  }
+}
+
+const loadSelectedEquipmentSales = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_EQUIPMENT_SALES)
+    if (saved) {
+      const selectedArray = JSON.parse(saved)
+      selectedEquipmentSalesIds.value = selectedArray
+      selectAllEquipmentSales.value = selectedArray.length > 0
+    }
+  } catch (error) {
+    console.warn('Failed to load selected equipment sales:', error)
+  }
+}
+
+const updateUrlParams = () => {
+  const query = {}
+  if (selectedId.value) {
+    if (viewMode.value === 'projects') {
+      query.project = selectedId.value
+    } else {
+      query.sale = selectedId.value
+    }
+  }
+  
+  // Update URL without triggering navigation
+  router.replace({ query })
+}
+
+// Watchers for persistence
+watch(viewMode, (newValue) => {
+  saveToLocalStorage(STORAGE_KEYS.VIEW_MODE, newValue)
+  updateUrlParams()
+})
+
+watch(selectedId, (newValue) => {
+  saveToLocalStorage(STORAGE_KEYS.SELECTED_ID, newValue)
+  updateUrlParams()
+})
+
+
+// Watch for route changes to handle navigation
+watch(() => route.query, async (newQuery) => {
+  const saleId = newQuery.sale
+  const projectId = newQuery.project
+  
+  if (projectId && projectId !== selectedId.value) {
+    viewMode.value = 'projects'
+    selectedId.value = projectId
+    await loadData()
+  } else if (saleId && saleId !== selectedId.value) {
+    viewMode.value = 'single'
+    selectedId.value = saleId
+    await loadData()
+  }
+}, { immediate: false })
 const loading = ref(false)
 const error = ref(null)
 const chartData = ref(null)
@@ -634,6 +626,15 @@ const milestoneEditData = ref({
   payment_due_date: ''
 })
 
+// Equipment sales selection state
+const selectedEquipmentSalesIds = ref([])
+const selectedEquipmentSales = computed(() => {
+  return equipmentSales.value.filter(sale => selectedEquipmentSalesIds.value.includes(sale.id))
+})
+const selectAllEquipmentSales = ref(false)
+
+
+
 const selectedItem = computed(() => {
   if (viewMode.value === 'projects') {
     return projects.value.find(project => project.id === parseInt(selectedId.value))
@@ -641,6 +642,63 @@ const selectedItem = computed(() => {
     return equipmentSales.value.find(sale => sale.id === parseInt(selectedId.value))
   }
 })
+const equipmentSalesForProject = computed(() => {
+  const project = projects.value.find(project => project.id === parseInt(selectedId.value))
+  return project?.equipment_sales || []
+})
+
+// Filtered equipment sales based on selection
+const filteredEquipmentSalesForProject = computed(() => {
+  if (selectedEquipmentSalesIds.value.length === 0) {
+    return equipmentSalesForProject.value
+  }
+  return equipmentSalesForProject.value.filter(sale => selectedEquipmentSalesIds.value.includes(sale.id))
+})
+
+// Filtered chart data based on selection
+const filteredChartData = computed(() => {
+  if (!chartData.value) return null
+  
+  if (viewMode.value === 'single') {
+    return chartData.value
+  }
+  
+  // For projects view, filter milestones based on selected equipment sales
+  if (selectedEquipmentSalesIds.value.length === 0) {
+    return chartData.value
+  }
+  
+  const filteredData = { ...chartData.value }
+  if (filteredData.project_timeline && Array.isArray(filteredData.project_timeline)) {
+    filteredData.project_timeline = filteredData.project_timeline.filter(milestone => 
+      milestone.sale_id && selectedEquipmentSalesIds.value.includes(milestone.sale_id)
+    )
+  }
+  
+  return filteredData
+})
+
+// Selection management functions
+const toggleEquipmentSaleSelection = (saleId) => {
+  const index = selectedEquipmentSalesIds.value.indexOf(saleId)
+  if (index > -1) {
+    selectedEquipmentSalesIds.value.splice(index, 1)
+  } else {
+    selectedEquipmentSalesIds.value.push(saleId)
+  }
+  selectAllEquipmentSales.value = selectedEquipmentSalesIds.value.length === equipmentSalesForProject.value.length
+  saveSelectedEquipmentSales()
+}
+
+const toggleSelectAllEquipmentSales = () => {
+  if (selectAllEquipmentSales.value) {
+    selectedEquipmentSalesIds.value = []
+  } else {
+    selectedEquipmentSalesIds.value = equipmentSalesForProject.value.map(sale => sale.id)
+  }
+  selectAllEquipmentSales.value = !selectAllEquipmentSales.value
+  saveSelectedEquipmentSales()
+}
 
 const loadEquipmentSales = async () => {
   try {
@@ -700,7 +758,7 @@ const loadData = async () => {
 }
 
 const onViewModeChange = () => {
-  selectedId.value = ''
+  // Don't clear selectedId when changing view modes - let user keep their selection
   chartData.value = null
   ganttOptions.value = null
 }
@@ -1010,6 +1068,8 @@ const onEditSaleSaved = async () => {
       loadProjects(),
       loadEquipmentSales()
     ])
+    // Force Vue to re-evaluate computed properties
+    await nextTick()
     // Refresh chart if we have a selected project
     if (selectedId.value) {
       await loadData()
@@ -1017,6 +1077,8 @@ const onEditSaleSaved = async () => {
   } else {
     // If editing from equipment sales list, reload equipment sales
     await loadEquipmentSales()
+    // Force Vue to re-evaluate computed properties
+    await nextTick()
     // Refresh chart if we have a selected sale
     if (selectedId.value) {
       await loadData()
@@ -1034,6 +1096,8 @@ const onCreateSaleSaved = async () => {
       loadProjects(),
       loadEquipmentSales()
     ])
+    // Force Vue to re-evaluate computed properties
+    await nextTick()
     // Refresh chart if we have a selected project
     if (selectedId.value) {
       await loadData()
@@ -1041,6 +1105,8 @@ const onCreateSaleSaved = async () => {
   } else {
     // If creating from equipment sales list, reload equipment sales
     await loadEquipmentSales()
+    // Force Vue to re-evaluate computed properties
+    await nextTick()
     // Refresh chart if we have a selected sale
     if (selectedId.value) {
       await loadData()
@@ -1051,13 +1117,24 @@ const onCreateSaleSaved = async () => {
 }
 
 const createGanttChart = () => {
-  const milestones = chartData.value.milestone_schedule || chartData.value.project_timeline
-  const startDate = new Date(chartData.value.start_date || chartData.value.project_start_date)
+  const dataToUse = filteredChartData.value || chartData.value
+  if (!dataToUse) return
+  
+  const milestones = dataToUse.milestone_schedule || dataToUse.project_timeline
+  if (!milestones || !Array.isArray(milestones)) return
+  
+  const startDate = new Date(dataToUse.start_date || dataToUse.project_start_date)
 
   // Prepare data for Highcharts Gantt
   const seriesData = milestones.map((milestone, index) => {
-    const startDateMs = new Date(startDate.getTime() + milestone.start_days * 24 * 60 * 60 * 1000)
-    const endDateMs = new Date(startDate.getTime() + milestone.end_days * 24 * 60 * 60 * 1000)
+    const startDateMs = new Date(startDate.getTime() + (milestone.start_days || 0) * 24 * 60 * 60 * 1000)
+    const endDateMs = new Date(startDate.getTime() + (milestone.end_days || 0) * 24 * 60 * 60 * 1000)
+    
+    // Validate dates
+    if (isNaN(startDateMs.getTime()) || isNaN(endDateMs.getTime())) {
+      console.warn('Invalid milestone dates:', milestone)
+      return null
+    }
 
     return {
       id: `milestone-${milestone.milestone_id || milestone.id}`,
@@ -1070,7 +1147,7 @@ const createGanttChart = () => {
       color: getMilestoneColor(index),
       saleName: milestone.sale_name || null
     }
-  })
+  }).filter(item => item !== null)
 
   // Calculate dynamic height based on number of milestones
   const baseHeight = 200
@@ -1171,6 +1248,30 @@ const getMilestoneColor = (index) => {
   return colors[index % colors.length]
 }
 
+// Watch for changes in equipment sales selection to update select all checkbox
+watch([selectedEquipmentSalesIds, equipmentSalesForProject], () => {
+  selectAllEquipmentSales.value = selectedEquipmentSalesIds.value.length > 0 && 
+    selectedEquipmentSalesIds.value.length === equipmentSalesForProject.value.length
+}, { deep: true })
+
+// Watch for changes in filtered chart data to update the Gantt chart
+watch(filteredChartData, () => {
+  if (filteredChartData.value && selectedId.value && chartData.value) {
+    nextTick(() => {
+      createGanttChart()
+    })
+  }
+}, { deep: true })
+
+// Watch for changes in equipment sales selection to update the chart
+watch(selectedEquipmentSalesIds, () => {
+  if (selectedId.value && viewMode.value === 'projects' && chartData.value) {
+    nextTick(() => {
+      createGanttChart()
+    })
+  }
+}, { deep: true })
+
 onMounted(async () => {
   await Promise.all([
     loadEquipmentSales(),
@@ -1178,7 +1279,10 @@ onMounted(async () => {
     loadMilestoneStructures()
   ])
   
-  // Check if an ID was passed in the URL
+  // Load saved selections
+  loadSelectedEquipmentSales()
+  
+  // Check URL parameters first (highest priority)
   const saleId = route.query.sale
   const projectId = route.query.project
   
@@ -1190,6 +1294,18 @@ onMounted(async () => {
     viewMode.value = 'single'
     selectedId.value = saleId
     await loadData()
+  } else {
+    // If no URL params, restore from localStorage
+    const savedViewMode = loadFromLocalStorage(STORAGE_KEYS.VIEW_MODE, 'projects')
+    const savedSelectedId = loadFromLocalStorage(STORAGE_KEYS.SELECTED_ID, '')
+    
+    viewMode.value = savedViewMode
+    selectedId.value = savedSelectedId
+    
+    // Load data if we have a saved selection
+    if (savedSelectedId) {
+      await loadData()
+    }
   }
 })
 </script>
@@ -1411,7 +1527,7 @@ onMounted(async () => {
 
 .equipment-sales-table {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 1fr;
+  grid-template-columns: 0.5fr 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 1fr;
   gap: 0.5rem;
   overflow-x: auto;
 }
@@ -1437,6 +1553,17 @@ onMounted(async () => {
   padding: 0.75rem 0.5rem;
   border-bottom: 1px solid #e9ecef;
   text-align: center;
+}
+
+.checkbox-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-column input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 .sale-name {

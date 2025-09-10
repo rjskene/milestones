@@ -38,9 +38,20 @@ export function formatDate(dateString) {
   if (!dateString) return ''
   
   const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  
+  // Check if the date is valid
+  if (isNaN(date.getTime())) {
+    return 'Invalid Date'
+  }
+  
+  try {
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch (error) {
+    console.warn('Error formatting date:', dateString, error)
+    return 'Invalid Date'
+  }
 }
