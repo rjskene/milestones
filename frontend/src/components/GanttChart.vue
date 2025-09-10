@@ -3,19 +3,166 @@
     <div class="chart-header">
       <h2>Payment Milestone Schedule</h2>
       <div class="chart-controls">
-        <select v-model="selectedSaleId" @change="loadSchedule" class="sale-selector">
-          <option value="">Select an equipment sale</option>
+        <div class="view-toggle">
+          <label>
+            <input 
+              type="radio" 
+              v-model="viewMode" 
+              value="projects" 
+              @change="onViewModeChange"
+            >
+            Projects
+          </label>
+          <label>
+            <input 
+              type="radio"
+              v-model="viewMode" 
+              value="single" 
+              @change="onViewModeChange"
+            >
+            Single Sales
+          </label>
+        </div>
+        
+        <select v-model="selectedId" @change="loadData" class="selector">
+          <option value="">{{ viewMode === 'projects' ? 'Select a project' : 'Select an equipment sale' }}</option>
           <option 
-            v-for="sale in equipmentSales" 
-            :key="sale.id" 
-            :value="sale.id"
+            v-for="item in viewMode === 'projects' ? projects : equipmentSales" 
+            :key="item.id" 
+            :value="item.id"
           >
-            {{ sale.name }} - ${{ sale.total_amount }}
+            {{ item.name }} - {{ formatCurrency(item.total_value || item.total_amount) }}
           </option>
         </select>
-        <button @click="refreshChart" class="btn-secondary" :disabled="!selectedSaleId">
+        
+        <button @click="refreshChart" class="btn-secondary" :disabled="!selectedId">
           Refresh
         </button>
+        
+        <div class="action-buttons">
+          <button @click="showCreateForm = true" class="btn-primary">
+            {{ viewMode === 'projects' ? 'Create Project' : 'Create Sale' }}
+          </button>
+          <button v-if="viewMode === 'projects'" @click="createEquipmentSale" class="btn-primary">
+            Create Sale
+          </button>
+          <button @click="showMilestoneForm = true" class="btn-primary">
+            Create Milestones
+          </button>
+          <button @click="showQuickActions = !showQuickActions" class="btn-secondary">
+            Quick Actions
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions Panel -->
+    <div v-if="showQuickActions" class="quick-actions-panel">
+      <h3>Quick Actions</h3>
+      <div class="quick-actions-grid">
+        <div class="quick-action-card">
+          <h4>Projects</h4>
+          <div class="quick-actions">
+            <button @click="createProject" class="btn-primary">New Project</button>
+            <button @click="showProjectList = !showProjectList" class="btn-secondary">
+              {{ showProjectList ? 'Hide' : 'Show' }} All Projects
+            </button>
+          </div>
+        </div>
+        
+        <div class="quick-action-card">
+          <h4>Equipment Sales</h4>
+          <div class="quick-actions">
+            <button @click="createEquipmentSale" class="btn-primary">New Sale</button>
+            <button @click="showEquipmentList = !showEquipmentList" class="btn-secondary">
+              {{ showEquipmentList ? 'Hide' : 'Show' }} All Sales
+            </button>
+          </div>
+        </div>
+        
+        <div class="quick-action-card">
+          <h4>Milestone Structures</h4>
+          <div class="quick-actions">
+            <button @click="createMilestoneStructure" class="btn-primary">New Structure</button>
+            <button @click="showMilestoneList = !showMilestoneList" class="btn-secondary">
+              {{ showMilestoneList ? 'Hide' : 'Show' }} All Structures
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Project List -->
+    <div v-if="showProjectList" class="entity-list">
+      <h3>All Projects</h3>
+      <div class="entity-grid">
+        <div v-for="project in projects" :key="project.id" class="entity-card">
+          <div class="entity-header">
+            <h4>{{ project.name }}</h4>
+            <div class="entity-actions">
+              <button @click="editProject(project)" class="btn-edit">Edit</button>
+              <button @click="deleteProject(project)" class="btn-delete">Delete</button>
+              <button @click="selectProject(project)" class="btn-primary">View Schedule</button>
+            </div>
+          </div>
+          <div class="entity-details">
+            <p><strong>Start Date:</strong> {{ formatDate(project.start_date) }}</p>
+            <p><strong>Equipment Sales:</strong> {{ project.equipment_sales_count || 0 }}</p>
+            <p v-if="project.description"><strong>Description:</strong> {{ project.description }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Equipment Sales List -->
+    <div v-if="showEquipmentList" class="entity-list">
+      <h3>All Equipment Sales</h3>
+      <div class="entity-grid">
+        <div v-for="sale in equipmentSales" :key="sale.id" class="entity-card">
+          <div class="entity-header">
+            <h4>{{ sale.name }}</h4>
+            <div class="entity-actions">
+              <button @click="editEquipmentSale(sale)" class="btn-edit">Edit</button>
+              <button @click="deleteEquipmentSale(sale)" class="btn-delete">Delete</button>
+              <button @click="selectEquipmentSale(sale)" class="btn-primary">View Schedule</button>
+              <button v-if="!sale.milestone_structure" @click="assignMilestoneToSale(sale)" class="btn-secondary">
+                Assign Milestone
+              </button>
+            </div>
+          </div>
+          <div class="entity-details">
+            <p><strong>Vendor:</strong> {{ sale.vendor || 'N/A' }}</p>
+            <p><strong>Type:</strong> {{ sale.sale_type }}</p>
+            <p><strong>Quantity:</strong> {{ sale.quantity }}</p>
+            <p><strong>Total Amount:</strong> {{ formatCurrency(sale.total_amount) }}</p>
+            <p><strong>Milestone Structure:</strong> {{ sale.milestone_structure?.name || 'None' }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Milestone Structures List -->
+    <div v-if="showMilestoneList" class="entity-list">
+      <h3>All Milestone Structures</h3>
+      <div class="entity-grid">
+        <div v-for="structure in milestoneStructures" :key="structure.id" class="entity-card">
+          <div class="entity-header">
+            <h4>{{ structure.name }}</h4>
+            <div class="entity-actions">
+              <button @click="editMilestoneStructure(structure)" class="btn-edit">Edit</button>
+              <button @click="deleteMilestoneStructure(structure)" class="btn-delete">Delete</button>
+            </div>
+          </div>
+          <div class="entity-details">
+            <p v-if="structure.description"><strong>Description:</strong> {{ structure.description }}</p>
+            <div class="milestones-preview">
+              <strong>Milestones:</strong>
+              <div v-for="milestone in structure.milestones" :key="milestone.id" class="milestone-item">
+                <span>{{ milestone.name }} - {{ milestone.payment_percentage }}% ({{ milestone.days_after_previous }} days)</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -23,51 +170,205 @@
       Loading schedule data...
     </div>
 
-    <div v-else-if="!selectedSaleId" class="empty-state">
-      <p>Please select an equipment sale to view its payment milestone schedule.</p>
+    <div v-else-if="!selectedId" class="empty-state">
+      <p>Please select a {{ viewMode === 'projects' ? 'project' : 'equipment sale' }} to view its payment milestone schedule.</p>
     </div>
 
-    <div v-else-if="!scheduleData" class="empty-state">
-      <p>No schedule data available for the selected sale.</p>
+    <div v-else-if="!chartData" class="empty-state">
+      <p>No schedule data available for the selected {{ viewMode === 'projects' ? 'project' : 'sale' }}.</p>
     </div>
 
     <div v-else class="chart-container">
-      <!-- Sale Information -->
-      <div class="sale-info">
-        <h3>{{ selectedSale.name }}</h3>
-        <div class="sale-details">
-          <span><strong>Vendor:</strong> {{ selectedSale.vendor || 'N/A' }}</span>
-          <span><strong>Quantity:</strong> {{ selectedSale.quantity }}</span>
-          <span><strong>Total Amount:</strong> ${{ selectedSale.total_amount }}</span>
-          <span><strong>Unit Price:</strong> ${{ selectedSale.unit_price.toFixed(2) }}</span>
-          <span><strong>Project Start:</strong> {{ formatDate(selectedSale.project_start_date) }}</span>
+      <!-- Project/Sale Information -->
+      <div class="info-section">
+        <div class="info-header">
+          <h3>{{ selectedItem.name }}</h3>
+          <div class="info-actions">
+            <button @click="editItem(selectedItem)" class="btn-edit">Edit</button>
+            <button @click="deleteItem(selectedItem)" class="btn-delete">Delete</button>
+          </div>
+        </div>
+        <div class="details">
+          <span v-if="viewMode === 'projects'">
+            <strong>Start Date:</strong> {{ formatDate(selectedItem.start_date) }}
+          </span>
+          <span v-if="viewMode === 'projects'">
+            <strong>Equipment Sales:</strong> {{ selectedItem.equipment_sales_count }}
+          </span>
+          <span v-if="viewMode === 'single'">
+            <strong>Vendor:</strong> {{ selectedItem.vendor || 'N/A' }}
+          </span>
+          <span v-if="viewMode === 'single'">
+            <strong>Sale Type:</strong> {{ selectedItem.sale_type }}
+          </span>
+          <span>
+            <strong>Quantity:</strong> {{ viewMode === 'projects' ? 'N/A' : selectedItem.quantity }}
+          </span>
+          <span>
+            <strong>Total Amount:</strong> {{ formatCurrency(viewMode === 'projects' ? selectedItem.total_value : selectedItem.total_amount) }}
+          </span>
+          <span v-if="viewMode === 'single'">
+            <strong>Unit Price:</strong> {{ formatCurrency(selectedItem.unit_price) }}
+          </span>
+          <span>
+            <strong>Start Date:</strong> {{ formatDate(viewMode === 'projects' ? selectedItem.start_date : selectedItem.project_start_date) }}
+          </span>
         </div>
       </div>
 
       <!-- Gantt Chart -->
-      <highcharts :constructorType="'ganttChart'" class="chart" :options="ganttOptions" ref="chartContainer"></highcharts>
+      <div class="chart-wrapper">
+        <highcharts 
+          :constructorType="'ganttChart'" 
+          class="chart" 
+          :options="ganttOptions" 
+          ref="chartContainer"
+        ></highcharts>
+      </div>
       
+      <!-- Equipment Sale Details Table -->
+      <div v-if="selectedItem && (viewMode === 'single' || (viewMode === 'projects' && selectedItem.equipment_sales?.length > 0))" class="equipment-sale-details">
+        <h4>Equipment Sale Details</h4>
+        
+        <!-- Single Sale View - Vertical Table -->
+        <div v-if="viewMode === 'single'" class="details-table">
+          <div class="details-header">
+            <span>Property</span>
+            <span>Value</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Sale Name</span>
+            <span>{{ selectedItem.name }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Vendor</span>
+            <span>{{ selectedItem.vendor || 'N/A' }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Sale Type</span>
+            <span>{{ selectedItem.sale_type }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Quantity</span>
+            <span>{{ selectedItem.quantity }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Unit Price</span>
+            <span class="amount">{{ formatCurrency(selectedItem.unit_price) }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Total Amount</span>
+            <span class="amount">{{ formatCurrency(selectedItem.total_amount) }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Project Start Date</span>
+            <span>{{ formatDate(selectedItem.project_start_date) }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Milestone Structure</span>
+            <span>{{ selectedItem.milestone_structure?.name || 'None Assigned' }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Project</span>
+            <span>{{ selectedItem.project?.name || 'Standalone Sale' }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Created</span>
+            <span>{{ formatDate(selectedItem.created_at) }}</span>
+          </div>
+          <div class="details-row">
+            <span class="property-name">Last Updated</span>
+            <span>{{ formatDate(selectedItem.updated_at) }}</span>
+          </div>
+        </div>
+
+        <!-- Projects View - Horizontal Table -->
+        <div v-else-if="viewMode === 'projects'" class="equipment-sales-table">
+          <div class="sales-header">
+            <span>Sale Name</span>
+            <span>Vendor</span>
+            <span>Type</span>
+            <span>Quantity</span>
+            <span>Unit Price</span>
+            <span>Total Amount</span>
+            <span>Milestone Structure</span>
+            <span>Actions</span>
+          </div>
+          <div 
+            v-for="sale in selectedItem.equipment_sales" 
+            :key="sale.id" 
+            class="sales-row"
+          >
+            <span class="sale-name">{{ sale.name }}</span>
+            <span>{{ sale.vendor || 'N/A' }}</span>
+            <span>{{ sale.sale_type }}</span>
+            <span>{{ sale.quantity }}</span>
+            <span class="amount">{{ formatCurrency(sale.unit_price) }}</span>
+            <span class="amount">{{ formatCurrency(sale.total_amount) }}</span>
+            <span>{{ sale.milestone_structure?.name || 'None' }}</span>
+            <span class="sale-actions">
+              <button @click="editEquipmentSaleFromProjects(sale)" class="btn-edit-small" title="Edit sale">
+                ✏️
+              </button>
+              <button @click="selectEquipmentSale(sale)" class="btn-info-small" title="View schedule">
+                📊
+              </button>
+              <button v-if="!sale.milestone_structure" @click="assignMilestoneToSale(sale)" class="btn-secondary-small" title="Assign milestone">
+                ⚙️
+              </button>
+            </span>
+          </div>
+          <!-- Add New Sale Row -->
+          <div class="add-sale-row">
+            <span class="add-sale-cell">
+              <button @click="createEquipmentSaleFromProjects" class="btn-add-sale" title="Add new equipment sale">
+                <span class="plus-icon">+</span>
+                <span class="add-text">Add New Sale</span>
+              </button>
+            </span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+
       <!-- Schedule Summary -->
       <div class="schedule-summary">
         <h4>Payment Schedule Summary</h4>
         <div class="summary-table">
           <div class="summary-header">
             <span>Milestone</span>
+            <span v-if="viewMode === 'projects'">Equipment Sale</span>
             <span>Due Date</span>
             <span>Payment Due</span>
             <span>Amount</span>
             <span>Percentage</span>
+            <span>Actions</span>
           </div>
           <div 
-            v-for="milestone in scheduleData.milestone_schedule" 
-            :key="milestone.id" 
+            v-for="milestone in chartData.milestone_schedule || chartData.project_timeline" 
+            :key="`${milestone.sale_id || ''}-${milestone.milestone_id || milestone.id}`" 
             class="summary-row"
           >
-            <span class="milestone-name">{{ milestone.name }}</span>
+            <span class="milestone-name">{{ milestone.milestone_name || milestone.name }}</span>
+            <span v-if="viewMode === 'projects'" class="sale-name">{{ milestone.sale_name }}</span>
             <span>{{ formatDate(milestone.due_date) }}</span>
             <span>{{ formatDate(milestone.payment_due_date) }}</span>
-            <span class="amount">${{ milestone.payment_amount.toFixed(2) }}</span>
+            <span class="amount">{{ formatCurrency(milestone.payment_amount) }}</span>
             <span>{{ milestone.payment_percentage }}%</span>
+            <span class="milestone-actions">
+              <button @click="editMilestoneDetails(milestone)" class="btn-edit-small" title="Edit milestone">
+                ✏️
+              </button>
+              <button @click="viewMilestoneDetails(milestone)" class="btn-info-small" title="View details">
+                👁️
+              </button>
+            </span>
           </div>
         </div>
       </div>
@@ -77,6 +378,200 @@
     <div v-if="error" class="error-message">
       {{ error }}
     </div>
+
+    <!-- Create/Edit Forms -->
+    <div v-if="showCreateForm" class="modal-overlay" @click="closeForm">
+      <div class="modal-content" @click.stop>
+        <ProjectForm 
+          v-if="viewMode === 'projects'"
+          :project="editingItem"
+          :is-editing="!!editingItem"
+          @close="closeForm"
+          @saved="onFormSaved"
+        />
+        <EquipmentSaleForm 
+          v-else
+          :sale="editingItem"
+          :is-editing="!!editingItem"
+          @close="closeForm"
+          @saved="onFormSaved"
+        />
+      </div>
+    </div>
+
+    <!-- Milestone Structure Form -->
+    <div v-if="showMilestoneForm" class="modal-overlay" @click="closeMilestoneForm">
+      <div class="modal-content" @click.stop>
+        <MilestoneForm 
+          :structure="editingMilestoneStructure"
+          :is-editing="!!editingMilestoneStructure"
+          @close="closeMilestoneForm"
+          @saved="onMilestoneFormSaved"
+        />
+      </div>
+    </div>
+
+    <!-- Milestone Assignment Modal -->
+    <div v-if="showMilestoneAssignment" class="modal-overlay" @click="closeMilestoneAssignment">
+      <div class="modal-content" @click.stop>
+        <div class="milestone-assignment-form">
+          <div class="form-header">
+            <h3>Assign Milestone Structure to {{ selectedSaleForMilestone?.name }}</h3>
+            <button @click="closeMilestoneAssignment" class="btn-close">×</button>
+          </div>
+          <div class="form-content">
+            <div class="form-group">
+              <label for="milestone-structure">Select Milestone Structure</label>
+              <select id="milestone-structure" v-model="selectedMilestoneStructureId">
+                <option value="">Choose a milestone structure</option>
+                <option 
+                  v-for="structure in milestoneStructures" 
+                  :key="structure.id" 
+                  :value="structure.id"
+                >
+                  {{ structure.name }}
+                </option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button @click="closeMilestoneAssignment" class="btn-secondary">Cancel</button>
+              <button @click="assignMilestone" class="btn-primary" :disabled="!selectedMilestoneStructureId">
+                Assign
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Milestone Details Modal -->
+    <div v-if="showMilestoneDetails" class="modal-overlay" @click="closeMilestoneDetails">
+      <div class="modal-content" @click.stop>
+        <div class="milestone-details-form">
+          <div class="form-header">
+            <h3>{{ isEditingMilestone ? 'Edit' : 'View' }} Milestone Details</h3>
+            <button @click="closeMilestoneDetails" class="btn-close">×</button>
+          </div>
+          <div class="form-content">
+            <div v-if="!isEditingMilestone" class="milestone-info">
+              <div class="info-row">
+                <label>Milestone Name:</label>
+                <span>{{ selectedMilestoneDetails?.milestone_name || selectedMilestoneDetails?.name }}</span>
+              </div>
+              <div class="info-row">
+                <label>Payment Amount:</label>
+                <span>{{ formatCurrency(selectedMilestoneDetails?.payment_amount) }}</span>
+              </div>
+              <div class="info-row">
+                <label>Payment Percentage:</label>
+                <span>{{ selectedMilestoneDetails?.payment_percentage }}%</span>
+              </div>
+              <div class="info-row">
+                <label>Due Date:</label>
+                <span>{{ formatDate(selectedMilestoneDetails?.due_date) }}</span>
+              </div>
+              <div class="info-row">
+                <label>Payment Due Date:</label>
+                <span>{{ formatDate(selectedMilestoneDetails?.payment_due_date) }}</span>
+              </div>
+              <div v-if="viewMode === 'projects'" class="info-row">
+                <label>Equipment Sale:</label>
+                <span>{{ selectedMilestoneDetails?.sale_name }}</span>
+              </div>
+            </div>
+            
+            <div v-else class="milestone-edit-form">
+              <div class="form-group">
+                <label for="milestone-name">Milestone Name</label>
+                <input 
+                  type="text" 
+                  id="milestone-name" 
+                  v-model="milestoneEditData.name"
+                  class="form-input"
+                />
+              </div>
+              <div class="form-group">
+                <label for="payment-amount">Payment Amount</label>
+                <input 
+                  type="number" 
+                  id="payment-amount" 
+                  v-model.number="milestoneEditData.payment_amount"
+                  step="0.01"
+                  class="form-input"
+                />
+              </div>
+              <div class="form-group">
+                <label for="payment-percentage">Payment Percentage</label>
+                <input 
+                  type="number" 
+                  id="payment-percentage" 
+                  v-model.number="milestoneEditData.payment_percentage"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  class="form-input"
+                />
+              </div>
+              <div class="form-group">
+                <label for="due-date">Due Date</label>
+                <input 
+                  type="date" 
+                  id="due-date" 
+                  v-model="milestoneEditData.due_date"
+                  class="form-input"
+                />
+              </div>
+              <div class="form-group">
+                <label for="payment-due-date">Payment Due Date</label>
+                <input 
+                  type="date" 
+                  id="payment-due-date" 
+                  v-model="milestoneEditData.payment_due_date"
+                  class="form-input"
+                />
+              </div>
+            </div>
+            
+            <div class="form-actions">
+              <button @click="closeMilestoneDetails" class="btn-secondary">
+                {{ isEditingMilestone ? 'Cancel' : 'Close' }}
+              </button>
+              <button v-if="!isEditingMilestone" @click="startEditingMilestone" class="btn-primary">
+                Edit
+              </button>
+              <button v-if="isEditingMilestone" @click="saveMilestoneChanges" class="btn-primary">
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Equipment Sale Modal -->
+    <div v-if="showEditSaleModal" class="modal-overlay" @click="closeEditSaleModal">
+      <div class="modal-content" @click.stop>
+        <EquipmentSaleForm 
+          :sale="editingItem"
+          :is-editing="true"
+          @close="closeEditSaleModal"
+          @saved="onEditSaleSaved"
+        />
+      </div>
+    </div>
+
+    <!-- Create Equipment Sale Modal -->
+    <div v-if="showCreateSaleModal" class="modal-overlay" @click="closeCreateSaleModal">
+      <div class="modal-content" @click.stop>
+        <EquipmentSaleForm 
+          :sale="null"
+          :is-editing="false"
+          :project="creatingFromProjects ? selectedItem : null"
+          @close="closeCreateSaleModal"
+          @saved="onCreateSaleSaved"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -84,26 +579,68 @@
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEquipmentStore } from '../stores/equipmentStore'
+import { useProjectStore } from '../stores/projectStore'
+import { useMilestoneStore } from '../stores/milestoneStore'
+import { formatCurrency, formatDate } from '../utils/formatters'
+import ProjectForm from './ProjectForm.vue'
+import EquipmentSaleForm from './EquipmentSaleForm.vue'
+import MilestoneForm from './MilestoneForm.vue'
 
 const route = useRoute()
 const equipmentStore = useEquipmentStore()
+const projectStore = useProjectStore()
+const milestoneStore = useMilestoneStore()
 
 const chartContainer = ref(null)
 const ganttOptions = ref(null)
 
-const selectedSaleId = ref('')
+const viewMode = ref('projects') // 'single' or 'projects'
+const selectedId = ref('')
 const loading = ref(false)
 const error = ref(null)
-const scheduleData = ref(null)
+const chartData = ref(null)
 const equipmentSales = ref([])
+const projects = ref([])
+const milestoneStructures = ref([])
 
-const selectedSale = computed(() => {
-  return equipmentSales.value.find(sale => sale.id === parseInt(selectedSaleId.value))
+// Form states
+const showCreateForm = ref(false)
+const showMilestoneForm = ref(false)
+const showMilestoneAssignment = ref(false)
+const showEditSaleModal = ref(false)
+const showCreateSaleModal = ref(false)
+const editingItem = ref(null)
+const editingMilestoneStructure = ref(null)
+const selectedSaleForMilestone = ref(null)
+const selectedMilestoneStructureId = ref('')
+const editingFromProjects = ref(false)
+const creatingFromProjects = ref(false)
+
+// List visibility states
+const showQuickActions = ref(false)
+const showProjectList = ref(false)
+const showEquipmentList = ref(false)
+const showMilestoneList = ref(false)
+
+// Milestone details modal states
+const showMilestoneDetails = ref(false)
+const selectedMilestoneDetails = ref(null)
+const isEditingMilestone = ref(false)
+const milestoneEditData = ref({
+  name: '',
+  payment_amount: 0,
+  payment_percentage: 0,
+  due_date: '',
+  payment_due_date: ''
 })
 
-const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString()
-}
+const selectedItem = computed(() => {
+  if (viewMode.value === 'projects') {
+    return projects.value.find(project => project.id === parseInt(selectedId.value))
+  } else {
+    return equipmentSales.value.find(sale => sale.id === parseInt(selectedId.value))
+  }
+})
 
 const loadEquipmentSales = async () => {
   try {
@@ -115,9 +652,29 @@ const loadEquipmentSales = async () => {
   }
 }
 
-const loadSchedule = async () => {
-  if (!selectedSaleId.value) {
-    scheduleData.value = null
+const loadProjects = async () => {
+  try {
+    await projectStore.fetchProjects()
+    projects.value = projectStore.projects
+  } catch (err) {
+    error.value = 'Failed to load projects'
+    console.error('Error loading projects:', err)
+  }
+}
+
+const loadMilestoneStructures = async () => {
+  try {
+    await milestoneStore.fetchMilestoneStructures()
+    milestoneStructures.value = milestoneStore.milestoneStructures
+  } catch (err) {
+    error.value = 'Failed to load milestone structures'
+    console.error('Error loading milestone structures:', err)
+  }
+}
+
+const loadData = async () => {
+  if (!selectedId.value) {
+    chartData.value = null
     return
   }
 
@@ -125,55 +682,418 @@ const loadSchedule = async () => {
   error.value = null
 
   try {
-    const data = await equipmentStore.getEquipmentSaleSchedule(selectedSaleId.value)
-    scheduleData.value = data
+    if (viewMode.value === 'projects') {
+      const data = await projectStore.getProjectTimeline(selectedId.value)
+      chartData.value = data
+    } else {
+      const data = await equipmentStore.getEquipmentSaleSchedule(selectedId.value)
+      chartData.value = data
+    }
     await nextTick()
     createGanttChart()
   } catch (err) {
-    error.value = 'Failed to load schedule data'
-    console.error('Error loading schedule:', err)
+    error.value = `Failed to load ${viewMode.value === 'projects' ? 'project' : 'sale'} data`
+    console.error('Error loading data:', err)
   } finally {
     loading.value = false
   }
 }
 
+const onViewModeChange = () => {
+  selectedId.value = ''
+  chartData.value = null
+  ganttOptions.value = null
+}
+
 const refreshChart = () => {
-  if (selectedSaleId.value) {
-    loadSchedule()
+  if (selectedId.value) {
+    loadData()
   }
 }
 
-const createGanttChart = () => {
+const closeForm = () => {
+  showCreateForm.value = false
+  editingItem.value = null
+}
 
-  const milestones = scheduleData.value.milestone_schedule
-  const projectStartDate = new Date(scheduleData.value.project_start_date)
+const onFormSaved = async () => {
+  // Reload data after form is saved
+  if (viewMode.value === 'projects') {
+    await loadProjects()
+  } else {
+    await loadEquipmentSales()
+  }
+  
+  // Refresh chart if we have a selected item
+  if (selectedId.value) {
+    await loadData()
+  }
+  
+  // Close any open lists to show the updated chart
+  showProjectList.value = false
+  showEquipmentList.value = false
+}
+
+const editItem = (item) => {
+  editingItem.value = item
+  showCreateForm.value = true
+}
+
+const deleteItem = async (item) => {
+  if (!confirm(`Are you sure you want to delete "${item.name}"?`)) {
+    return
+  }
+
+  try {
+    if (viewMode.value === 'projects') {
+      await projectStore.deleteProject(item.id)
+      await loadProjects()
+    } else {
+      await equipmentStore.deleteEquipmentSale(item.id)
+      await loadEquipmentSales()
+    }
+    
+    // Clear selection if we deleted the currently selected item
+    if (selectedId.value == item.id) {
+      selectedId.value = ''
+      chartData.value = null
+    }
+  } catch (err) {
+    error.value = `Failed to delete ${viewMode.value === 'projects' ? 'project' : 'sale'}`
+    console.error('Error deleting item:', err)
+  }
+}
+
+// Project CRUD methods
+const createProject = () => {
+  editingItem.value = null
+  showCreateForm.value = true
+}
+
+const editProject = (project) => {
+  editingItem.value = project
+  viewMode.value = 'projects'
+  showCreateForm.value = true
+}
+
+const deleteProject = async (project) => {
+  if (!confirm(`Are you sure you want to delete project "${project.name}"?`)) {
+    return
+  }
+
+  try {
+    await projectStore.deleteProject(project.id)
+    await loadProjects()
+    
+    // Clear selection if we deleted the currently selected item
+    if (selectedId.value == project.id) {
+      selectedId.value = ''
+      chartData.value = null
+    }
+  } catch (err) {
+    error.value = 'Failed to delete project'
+    console.error('Error deleting project:', err)
+  }
+}
+
+const selectProject = (project) => {
+  viewMode.value = 'projects'
+  selectedId.value = project.id
+  showProjectList.value = false
+  loadData()
+}
+
+// Equipment Sale CRUD methods
+const createEquipmentSale = () => {
+  editingItem.value = null
+  viewMode.value = 'single'
+  showCreateForm.value = true
+}
+
+const editEquipmentSale = (sale) => {
+  editingItem.value = sale
+  viewMode.value = 'single'
+  showCreateForm.value = true
+}
+
+const editEquipmentSaleFromProjects = (sale) => {
+  editingItem.value = sale
+  editingFromProjects.value = true
+  showEditSaleModal.value = true
+}
+
+const createEquipmentSaleFromProjects = () => {
+  editingItem.value = null
+  creatingFromProjects.value = true
+  showCreateSaleModal.value = true
+}
+
+const deleteEquipmentSale = async (sale) => {
+  if (!confirm(`Are you sure you want to delete equipment sale "${sale.name}"?`)) {
+    return
+  }
+
+  try {
+    await equipmentStore.deleteEquipmentSale(sale.id)
+    await loadEquipmentSales()
+    
+    // Clear selection if we deleted the currently selected item
+    if (selectedId.value == sale.id) {
+      selectedId.value = ''
+      chartData.value = null
+    }
+  } catch (err) {
+    error.value = 'Failed to delete equipment sale'
+    console.error('Error deleting equipment sale:', err)
+  }
+}
+
+const selectEquipmentSale = (sale) => {
+  viewMode.value = 'single'
+  selectedId.value = sale.id
+  showEquipmentList.value = false
+  loadData()
+}
+
+// Milestone Structure CRUD methods
+const createMilestoneStructure = () => {
+  editingMilestoneStructure.value = null
+  showMilestoneForm.value = true
+}
+
+const editMilestoneStructure = (structure) => {
+  editingMilestoneStructure.value = structure
+  showMilestoneForm.value = true
+}
+
+const deleteMilestoneStructure = async (structure) => {
+  if (!confirm(`Are you sure you want to delete milestone structure "${structure.name}"?`)) {
+    return
+  }
+
+  try {
+    await milestoneStore.deleteMilestoneStructure(structure.id)
+    await loadMilestoneStructures()
+  } catch (err) {
+    error.value = 'Failed to delete milestone structure'
+    console.error('Error deleting milestone structure:', err)
+  }
+}
+
+// Milestone Assignment methods
+const assignMilestoneToSale = (sale) => {
+  selectedSaleForMilestone.value = sale
+  selectedMilestoneStructureId.value = ''
+  showMilestoneAssignment.value = true
+}
+
+const assignMilestone = async () => {
+  if (!selectedMilestoneStructureId.value || !selectedSaleForMilestone.value) {
+    return
+  }
+
+  try {
+    await equipmentStore.assignMilestoneStructure(
+      selectedSaleForMilestone.value.id,
+      selectedMilestoneStructureId.value
+    )
+    await loadEquipmentSales()
+    closeMilestoneAssignment()
+    
+    // If this was the currently selected sale, refresh the chart
+    if (selectedId.value == selectedSaleForMilestone.value.id) {
+      await loadData()
+    }
+  } catch (err) {
+    error.value = 'Failed to assign milestone structure'
+    console.error('Error assigning milestone structure:', err)
+  }
+}
+
+// Form close methods
+const closeMilestoneForm = () => {
+  showMilestoneForm.value = false
+  editingMilestoneStructure.value = null
+}
+
+const closeMilestoneAssignment = () => {
+  showMilestoneAssignment.value = false
+  selectedSaleForMilestone.value = null
+  selectedMilestoneStructureId.value = ''
+}
+
+const onMilestoneFormSaved = async () => {
+  await loadMilestoneStructures()
+  closeMilestoneForm()
+}
+
+// Milestone details methods
+const editMilestoneDetails = (milestone) => {
+  selectedMilestoneDetails.value = milestone
+  isEditingMilestone.value = true
+  milestoneEditData.value = {
+    name: milestone.milestone_name || milestone.name,
+    payment_amount: milestone.payment_amount,
+    payment_percentage: milestone.payment_percentage,
+    due_date: milestone.due_date,
+    payment_due_date: milestone.payment_due_date
+  }
+  showMilestoneDetails.value = true
+}
+
+const viewMilestoneDetails = (milestone) => {
+  selectedMilestoneDetails.value = milestone
+  isEditingMilestone.value = false
+  showMilestoneDetails.value = true
+}
+
+const startEditingMilestone = () => {
+  isEditingMilestone.value = true
+  milestoneEditData.value = {
+    name: selectedMilestoneDetails.value.milestone_name || selectedMilestoneDetails.value.name,
+    payment_amount: selectedMilestoneDetails.value.payment_amount,
+    payment_percentage: selectedMilestoneDetails.value.payment_percentage,
+    due_date: selectedMilestoneDetails.value.due_date,
+    payment_due_date: selectedMilestoneDetails.value.payment_due_date
+  }
+}
+
+const saveMilestoneChanges = async () => {
+  try {
+    // Note: This would require backend API support for updating individual milestones
+    // For now, we'll just show a message that this feature requires backend support
+    alert('Milestone editing requires backend API support. This feature is ready for implementation.')
+    
+    // Close the modal
+    closeMilestoneDetails()
+    
+    // Refresh the chart data
+    if (selectedId.value) {
+      await loadData()
+    }
+  } catch (err) {
+    error.value = 'Failed to update milestone'
+    console.error('Error updating milestone:', err)
+  }
+}
+
+const closeMilestoneDetails = () => {
+  showMilestoneDetails.value = false
+  selectedMilestoneDetails.value = null
+  isEditingMilestone.value = false
+  milestoneEditData.value = {
+    name: '',
+    payment_amount: 0,
+    payment_percentage: 0,
+    due_date: '',
+    payment_due_date: ''
+  }
+}
+
+const closeEditSaleModal = () => {
+  showEditSaleModal.value = false
+  editingItem.value = null
+  editingFromProjects.value = false
+}
+
+const closeCreateSaleModal = () => {
+  showCreateSaleModal.value = false
+  editingItem.value = null
+  creatingFromProjects.value = false
+}
+
+const onEditSaleSaved = async () => {
+  // Reload data after sale is saved
+  if (editingFromProjects.value) {
+    // If editing from projects, reload both projects and equipment sales data
+    await Promise.all([
+      loadProjects(),
+      loadEquipmentSales()
+    ])
+    // Refresh chart if we have a selected project
+    if (selectedId.value) {
+      await loadData()
+    }
+  } else {
+    // If editing from equipment sales list, reload equipment sales
+    await loadEquipmentSales()
+    // Refresh chart if we have a selected sale
+    if (selectedId.value) {
+      await loadData()
+    }
+  }
+  
+  closeEditSaleModal()
+}
+
+const onCreateSaleSaved = async () => {
+  // Reload data after sale is created
+  if (creatingFromProjects.value) {
+    // If creating from projects, reload both projects and equipment sales data
+    await Promise.all([
+      loadProjects(),
+      loadEquipmentSales()
+    ])
+    // Refresh chart if we have a selected project
+    if (selectedId.value) {
+      await loadData()
+    }
+  } else {
+    // If creating from equipment sales list, reload equipment sales
+    await loadEquipmentSales()
+    // Refresh chart if we have a selected sale
+    if (selectedId.value) {
+      await loadData()
+    }
+  }
+  
+  closeCreateSaleModal()
+}
+
+const createGanttChart = () => {
+  const milestones = chartData.value.milestone_schedule || chartData.value.project_timeline
+  const startDate = new Date(chartData.value.start_date || chartData.value.project_start_date)
 
   // Prepare data for Highcharts Gantt
   const seriesData = milestones.map((milestone, index) => {
-    const startDate = new Date(projectStartDate.getTime() + milestone.start_days * 24 * 60 * 60 * 1000)
-    const endDate = new Date(projectStartDate.getTime() + milestone.end_days * 24 * 60 * 60 * 1000)
+    const startDateMs = new Date(startDate.getTime() + milestone.start_days * 24 * 60 * 60 * 1000)
+    const endDateMs = new Date(startDate.getTime() + milestone.end_days * 24 * 60 * 60 * 1000)
 
     return {
-      id: `milestone-${milestone.id}`,
-      name: milestone.name,
-      start: startDate.getTime(),
-      end: endDate.getTime(),
+      id: `milestone-${milestone.milestone_id || milestone.id}`,
+      name: milestone.milestone_name || milestone.name,
+      start: startDateMs.getTime(),
+      end: endDateMs.getTime(),
       completed: {
         amount: 0 // No completion tracking for now
       },
-      color: getMilestoneColor(index)
+      color: getMilestoneColor(index),
+      saleName: milestone.sale_name || null
     }
   })
+
+  // Calculate dynamic height based on number of milestones
+  const baseHeight = 200
+  const heightPerMilestone = 50
+  const chartHeight = Math.max(baseHeight, milestones.length * heightPerMilestone)
+
   // Create the chart
   ganttOptions.value = {
     title: {
-      text: 'Payment Milestone Timeline'
+      text: viewMode.value === 'projects' ? 'Project Timeline' : 'Payment Milestone Timeline'
     },
     subtitle: {
-      text: `${selectedSale.value.name} - Payment Schedule`
+      text: `${selectedItem.value.name} - Payment Schedule`
     },
     accessibility: {
       enabled: false
+    },
+    chart: {
+      height: chartHeight,
+      scrollablePlotArea: {
+        minWidth: 800,
+        scrollPositionX: 1
+      }
     },
     xAxis: {
       type: 'datetime',
@@ -188,19 +1108,27 @@ const createGanttChart = () => {
     },
     tooltip: {
       formatter: function() {
-        const milestone = milestones.find(m => m.name === this.point.name)
+        const milestone = milestones.find(m => 
+          (m.milestone_name || m.name) === this.point.name
+        )
         if (!milestone) return ''
 
         const startDate = new Date(this.point.start)
         const endDate = new Date(this.point.end)
         
-        return `
+        let tooltip = `
           <b>${this.point.name}</b><br/>
           Start: ${startDate.toLocaleDateString()}<br/>
           End: ${endDate.toLocaleDateString()}<br/>
-          Payment: $${milestone.payment_amount.toFixed(2)} (${milestone.payment_percentage}%)<br/>
+          Payment: ${formatCurrency(milestone.payment_amount)} (${milestone.payment_percentage}%)<br/>
           Due: ${formatDate(milestone.payment_due_date)}
         `
+        
+        if (viewMode.value === 'projects' && milestone.sale_name) {
+          tooltip = `<b>${milestone.sale_name}</b><br/>` + tooltip
+        }
+        
+        return tooltip
       }
     },
     series: [{
@@ -212,8 +1140,10 @@ const createGanttChart = () => {
         dataLabels: {
           enabled: true,
           formatter: function() {
-            const milestone = milestones.find(m => m.name === this.point.name)
-            return milestone ? `$${milestone.payment_amount.toFixed(0)}` : ''
+            const milestone = milestones.find(m => 
+              (m.milestone_name || m.name) === this.point.name
+            )
+            return milestone ? formatCurrency(milestone.payment_amount, '$', 0) : ''
           }
         }
       }
@@ -242,13 +1172,24 @@ const getMilestoneColor = (index) => {
 }
 
 onMounted(async () => {
-  await loadEquipmentSales()
+  await Promise.all([
+    loadEquipmentSales(),
+    loadProjects(),
+    loadMilestoneStructures()
+  ])
   
-  // Check if a sale ID was passed in the URL
+  // Check if an ID was passed in the URL
   const saleId = route.query.sale
-  if (saleId) {
-    selectedSaleId.value = saleId
-    await loadSchedule()
+  const projectId = route.query.project
+  
+  if (projectId) {
+    viewMode.value = 'projects'
+    selectedId.value = projectId
+    await loadData()
+  } else if (saleId) {
+    viewMode.value = 'single'
+    selectedId.value = saleId
+    await loadData()
   }
 })
 </script>
@@ -276,9 +1217,34 @@ onMounted(async () => {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.sale-selector {
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.view-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.view-toggle input[type="radio"] {
+  margin: 0;
+}
+
+.selector {
   padding: 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -286,7 +1252,7 @@ onMounted(async () => {
   min-width: 250px;
 }
 
-.sale-selector:focus {
+.selector:focus {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
@@ -308,31 +1274,238 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.sale-info {
+.info-section {
   padding: 1.5rem;
   background: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
 }
 
-.sale-info h3 {
-  color: #2c3e50;
-  margin: 0 0 1rem 0;
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
 }
 
-.sale-details {
+.info-header h3 {
+  color: #2c3e50;
+  margin: 0;
+}
+
+.info-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-edit {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+  background-color: #2980b9;
+}
+
+.btn-delete {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+  background-color: #c0392b;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #2980b9;
+}
+
+.details {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
 }
 
-.sale-details span {
+.details span {
   color: #7f8c8d;
   font-size: 0.9rem;
 }
 
-.chart {
-  height: 400px;
+.chart-wrapper {
   padding: 1rem;
+  overflow: auto;
+  max-height: 80vh;
+}
+
+.chart {
+  min-height: 300px;
+  width: 100%;
+}
+
+.equipment-sale-details {
+  padding: 1.5rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.equipment-sale-details h4 {
+  color: #2c3e50;
+  margin: 0 0 1rem 0;
+}
+
+.details-table {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.details-header {
+  display: contents;
+}
+
+.details-header span {
+  font-weight: 600;
+  color: #2c3e50;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.details-row {
+  display: contents;
+}
+
+.details-row span {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #e9ecef;
+  text-align: left;
+}
+
+.property-name {
+  font-weight: 500;
+  color: #2c3e50;
+  background: #f8f9fa;
+}
+
+.equipment-sales-table {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 1fr;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.sales-header {
+  display: contents;
+}
+
+.sales-header span {
+  font-weight: 600;
+  color: #2c3e50;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.sales-row {
+  display: contents;
+}
+
+.sales-row span {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #e9ecef;
+  text-align: center;
+}
+
+.sale-name {
+  text-align: left !important;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.sale-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.btn-secondary-small {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary-small:hover {
+  background-color: #95a5a6;
+}
+
+.add-sale-row {
+  display: contents;
+}
+
+.add-sale-cell {
+  grid-column: 1 / -1;
+  padding: 1rem 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.btn-add-sale {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
+}
+
+.btn-add-sale:hover {
+  background: linear-gradient(135deg, #2980b9, #1f5f8b);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.plus-icon {
+  font-size: 1.2rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.add-text {
+  font-size: 0.9rem;
 }
 
 .schedule-summary {
@@ -347,8 +1520,9 @@ onMounted(async () => {
 
 .summary-table {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
   gap: 0.5rem;
+  overflow-x: auto;
 }
 
 .summary-header {
@@ -378,6 +1552,12 @@ onMounted(async () => {
   text-align: left !important;
   font-weight: 500;
   color: #2c3e50;
+}
+
+.sale-name {
+  text-align: left !important;
+  font-style: italic;
+  color: #7f8c8d;
 }
 
 .amount {
@@ -412,6 +1592,27 @@ onMounted(async () => {
   margin-top: 1rem;
 }
 
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
 @media (max-width: 768px) {
   .chart-header {
     flex-direction: column;
@@ -420,13 +1621,81 @@ onMounted(async () => {
   
   .chart-controls {
     justify-content: center;
+    flex-direction: column;
   }
   
-  .sale-details {
+  .view-toggle {
+    justify-content: center;
+  }
+  
+  .details {
     flex-direction: column;
     gap: 0.5rem;
   }
   
+  .details-table {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .details-header,
+  .details-row {
+    display: block;
+  }
+  
+  .details-header span,
+  .details-row span {
+    display: block;
+    text-align: left;
+    border-bottom: none;
+    border-right: none;
+  }
+  
+  .details-header span {
+    background: #f8f9fa;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .equipment-sales-table {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .sales-header,
+  .sales-row {
+    display: block;
+  }
+  
+  .sales-header span,
+  .sales-row span {
+    display: block;
+    text-align: left;
+    border-bottom: none;
+    border-right: none;
+  }
+  
+  .sales-header span {
+    background: #f8f9fa;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .sale-actions {
+    justify-content: flex-start;
+  }
+
+  .add-sale-cell {
+    grid-column: 1;
+    padding: 0.75rem 0.5rem;
+  }
+
+  .btn-add-sale {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+  }
+
   .summary-table {
     grid-template-columns: 1fr;
     gap: 0;
@@ -449,6 +1718,322 @@ onMounted(async () => {
     background: #f8f9fa;
     font-weight: 600;
     margin-bottom: 0.25rem;
+  }
+}
+
+/* Quick Actions Panel */
+.quick-actions-panel {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.quick-actions-panel h3 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.quick-action-card {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.quick-action-card h4 {
+  color: #2c3e50;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Entity Lists */
+.entity-list {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.entity-list h3 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1rem;
+}
+
+.entity-card {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 1rem;
+  transition: box-shadow 0.2s;
+}
+
+.entity-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.entity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.entity-header h4 {
+  color: #2c3e50;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.entity-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.entity-details {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.entity-details p {
+  margin: 0.25rem 0;
+}
+
+.entity-details strong {
+  color: #2c3e50;
+}
+
+.milestones-preview {
+  margin-top: 0.5rem;
+}
+
+.milestone-item {
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  color: #7f8c8d;
+}
+
+/* Milestone Assignment Form */
+.milestone-assignment-form {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.milestone-assignment-form .form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.milestone-assignment-form .form-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.milestone-assignment-form .form-content {
+  padding: 1.5rem;
+}
+
+.milestone-assignment-form .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.milestone-assignment-form .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.milestone-assignment-form .form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.milestone-assignment-form .form-group select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.milestone-assignment-form .form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+/* Milestone Details Modal */
+.milestone-details-form {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.milestone-details-form .form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.milestone-details-form .form-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.milestone-details-form .form-content {
+  padding: 1.5rem;
+}
+
+.milestone-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f2f6;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row label {
+  font-weight: 500;
+  color: #2c3e50;
+  min-width: 150px;
+}
+
+.info-row span {
+  color: #7f8c8d;
+  text-align: right;
+}
+
+.milestone-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.milestone-edit-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.milestone-edit-form .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.milestone-edit-form .form-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.milestone-edit-form .form-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.milestone-details-form .form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+/* Milestone Actions in Summary Table */
+.milestone-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.btn-edit-small,
+.btn-info-small {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.btn-edit-small:hover {
+  background-color: #3498db;
+}
+
+.btn-info-small:hover {
+  background-color: #95a5a6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .entity-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .entity-actions {
+    justify-content: flex-start;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

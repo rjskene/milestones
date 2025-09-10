@@ -31,6 +31,14 @@
               placeholder="Vendor name (optional)"
             />
           </div>
+
+          <div class="form-group">
+            <label for="sale_type">Sale Type *</label>
+            <select id="sale_type" v-model="formData.sale_type" required>
+              <option value="vendor">Vendor Sale</option>
+              <option value="customer">Customer Sale</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-row">
@@ -65,19 +73,36 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label for="milestone_structure">Payment Milestone Structure *</label>
+            <label for="milestone_structure">Payment Milestone Structure</label>
             <select 
               id="milestone_structure" 
-              v-model="formData.milestone_structure_id" 
-              required
+              v-model="formData.milestone_structure_id"
             >
-              <option value="">Select a milestone structure</option>
+              <option value="">No milestone structure (assign later)</option>
               <option 
                 v-for="structure in milestoneStructures" 
                 :key="structure.id" 
                 :value="structure.id"
               >
                 {{ structure.name }}
+              </option>
+            </select>
+            <small class="form-help">You can assign a milestone structure now or later</small>
+          </div>
+
+          <div class="form-group">
+            <label for="project">Project (Optional)</label>
+            <select 
+              id="project" 
+              v-model="formData.project"
+            >
+              <option :value="null">No Project (Standalone Sale)</option>
+              <option 
+                v-for="project in projects" 
+                :key="project.id" 
+                :value="project.id"
+              >
+                {{ project.name }}
               </option>
             </select>
           </div>
@@ -149,7 +174,8 @@
           <div class="sale-details-row">
             <div class="detail-item">
               <label>Milestone Structure:</label>
-              <span>{{ sale.milestone_structure.name }}</span>
+              <span v-if="sale.milestone_structure">{{ sale.milestone_structure.name }}</span>
+              <span v-else class="no-milestone">No milestone structure assigned</span>
             </div>
             <div class="detail-item">
               <label>Project Start:</label>
@@ -158,7 +184,20 @@
           </div>
 
           <div class="sale-actions">
-            <button @click="viewSchedule(sale.id)" class="btn-secondary">View Schedule</button>
+            <button 
+              v-if="sale.milestone_structure" 
+              @click="viewSchedule(sale.id)" 
+              class="btn-secondary"
+            >
+              View Schedule
+            </button>
+            <button 
+              v-if="sale.can_assign_milestone" 
+              @click="openMilestoneModal(sale)" 
+              class="btn-primary"
+            >
+              Assign Milestone
+            </button>
             <button @click="editSale(sale)" class="btn-secondary">Edit</button>
             <button @click="deleteSale(sale.id)" class="btn-danger">Delete</button>
           </div>
@@ -170,6 +209,14 @@
     <div v-if="error" class="error-message">
       {{ error }}
     </div>
+
+    <!-- Milestone Assignment Modal -->
+    <MilestoneAssignmentModal
+      :is-open="showMilestoneModal"
+      :sale="selectedSaleForMilestone"
+      @close="closeMilestoneModal"
+      @assigned="onMilestoneAssigned"
+    />
   </div>
 </template>
 
@@ -178,25 +225,33 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMilestoneStore } from '../stores/milestoneStore'
 import { useEquipmentStore } from '../stores/equipmentStore'
+import { useProjectStore } from '../stores/projectStore'
+import MilestoneAssignmentModal from './MilestoneAssignmentModal.vue'
 
 const router = useRouter()
 const milestoneStore = useMilestoneStore()
 const equipmentStore = useEquipmentStore()
+const projectStore = useProjectStore()
 
 const showCreateForm = ref(false)
 const editingSale = ref(null)
 const loading = ref(false)
 const error = ref(null)
+const showMilestoneModal = ref(false)
+const selectedSaleForMilestone = ref(null)
 
 const milestoneStructures = ref([])
 const equipmentSales = ref([])
+const projects = ref([])
 
 const formData = reactive({
   name: '',
   vendor: '',
+  sale_type: 'vendor',
   quantity: 1,
   total_amount: 0,
   milestone_structure_id: '',
+  project: null,
   project_start_date: new Date().toISOString().split('T')[0]
 })
 
@@ -215,9 +270,11 @@ const formatDate = (dateString) => {
 const resetForm = () => {
   formData.name = ''
   formData.vendor = ''
+  formData.sale_type = 'vendor'
   formData.quantity = 1
   formData.total_amount = 0
   formData.milestone_structure_id = ''
+  formData.project = null
   formData.project_start_date = new Date().toISOString().split('T')[0]
   editingSale.value = null
   error.value = null
@@ -232,9 +289,11 @@ const editSale = (sale) => {
   editingSale.value = sale
   formData.name = sale.name
   formData.vendor = sale.vendor || ''
+  formData.sale_type = sale.sale_type || 'vendor'
   formData.quantity = sale.quantity
   formData.total_amount = parseFloat(sale.total_amount)
   formData.milestone_structure_id = sale.milestone_structure.id
+  formData.project = sale.project
   formData.project_start_date = sale.project_start_date
   showCreateForm.value = true
 }
@@ -251,9 +310,11 @@ const saveSale = async () => {
     const saleData = {
       name: formData.name,
       vendor: formData.vendor,
+      sale_type: formData.sale_type,
       quantity: formData.quantity,
       total_amount: formData.total_amount,
       milestone_structure_id: formData.milestone_structure_id,
+      project: formData.project,
       project_start_date: formData.project_start_date
     }
 
@@ -301,9 +362,34 @@ const loadSales = async () => {
   }
 }
 
+const loadProjects = async () => {
+  try {
+    await projectStore.fetchProjects()
+    projects.value = projectStore.projects
+  } catch (err) {
+    console.error('Failed to load projects:', err)
+  }
+}
+
+const openMilestoneModal = (sale) => {
+  selectedSaleForMilestone.value = sale
+  showMilestoneModal.value = true
+}
+
+const closeMilestoneModal = () => {
+  showMilestoneModal.value = false
+  selectedSaleForMilestone.value = null
+}
+
+const onMilestoneAssigned = async () => {
+  await loadSales()
+  closeMilestoneModal()
+}
+
 onMounted(() => {
   loadStructures()
   loadSales()
+  loadProjects()
 })
 </script>
 
@@ -583,5 +669,17 @@ onMounted(() => {
   padding: 1rem;
   border-radius: 4px;
   margin-top: 1rem;
+}
+
+.no-milestone {
+  color: #e74c3c;
+  font-style: italic;
+}
+
+.form-help {
+  display: block;
+  margin-top: 0.25rem;
+  color: #7f8c8d;
+  font-size: 0.875rem;
 }
 </style>

@@ -3,22 +3,27 @@
     <h2>Dashboard</h2>
     <div class="dashboard-grid">
       <div class="dashboard-card">
-        <h3>Milestone Structures</h3>
+        <h3>View Schedule</h3>
+        <p class="description">View payment schedules as gantt charts</p>
+        <router-link to="/chart" class="card-link">View Charts</router-link>
+      </div>
+      <div class="dashboard-card">
+        <h3>Projects</h3>
+        <p class="count">{{ projects.length }}</p>
+        <router-link to="/projects" class="card-link">Manage Projects</router-link>
+      </div>
+      <div class="dashboard-card">
+        <h3>Milestones</h3>
         <p class="count">{{ milestoneStructures.length }}</p>
         <router-link to="/milestones" class="card-link">Manage Structures</router-link>
       </div>
       
       <div class="dashboard-card">
-        <h3>Equipment Sales</h3>
+        <h3>Sales</h3>
         <p class="count">{{ equipmentSales.length }}</p>
         <router-link to="/equipment" class="card-link">Manage Sales</router-link>
       </div>
-      
-      <div class="dashboard-card">
-        <h3>View Schedule</h3>
-        <p class="description">View payment schedules as gantt charts</p>
-        <router-link to="/chart" class="card-link">View Charts</router-link>
-      </div>
+  
     </div>
     
     <div class="recent-activity" v-if="equipmentSales.length > 0">
@@ -43,13 +48,16 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMilestoneStore } from '../stores/milestoneStore'
 import { useEquipmentStore } from '../stores/equipmentStore'
+import { useProjectStore } from '../stores/projectStore'
 
 const router = useRouter()
 const milestoneStore = useMilestoneStore()
 const equipmentStore = useEquipmentStore()
+const projectStore = useProjectStore()
 
 const milestoneStructures = ref([])
 const equipmentSales = ref([])
+const projects = ref([])
 
 const recentSales = computed(() => {
   return equipmentSales.value.slice(0, 5)
@@ -61,10 +69,14 @@ const viewSchedule = (saleId) => {
 
 onMounted(async () => {
   try {
-    await milestoneStore.fetchMilestoneStructures()
-    await equipmentStore.fetchEquipmentSales()
+    await Promise.all([
+      milestoneStore.fetchMilestoneStructures(),
+      equipmentStore.fetchEquipmentSales(),
+      projectStore.fetchProjects()
+    ])
     milestoneStructures.value = milestoneStore.milestoneStructures
     equipmentSales.value = equipmentStore.equipmentSales
+    projects.value = projectStore.projects
   } catch (error) {
     console.error('Error loading dashboard data:', error)
   }

@@ -88,6 +88,46 @@ export const useEquipmentStore = defineStore('equipment', {
       } finally {
         this.loading = false
       }
+    },
+
+    async getAllEquipmentSaleSchedules() {
+      this.loading = true
+      this.error = null
+      try {
+        const response = await axios.get(`${API_BASE}/equipment/sales/schedules/`)
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.detail || 'Failed to fetch equipment sale schedules'
+        console.error('Error fetching equipment sale schedules:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async assignMilestoneStructure(saleId, milestoneStructureId) {
+      this.loading = true
+      this.error = null
+      try {
+        const response = await axios.post(
+          `${API_BASE}/equipment/sales/${saleId}/assign_milestone/`,
+          { milestone_structure_id: milestoneStructureId }
+        )
+        
+        // Update the sale in the local state
+        const index = this.equipmentSales.findIndex(s => s.id === saleId)
+        if (index !== -1) {
+          this.equipmentSales[index] = response.data
+        }
+        
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.detail || 'Failed to assign milestone structure'
+        console.error('Error assigning milestone structure:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
     }
   }
 })

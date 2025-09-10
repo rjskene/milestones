@@ -7,9 +7,21 @@ from milestones.models import PaymentMilestoneStructure
 class EquipmentSale(models.Model):
     """
     Equipment sale that uses a PaymentMilestoneStructure to define payment schedule.
+    Can be associated with a Project or standalone.
     """
+    SALE_TYPE_CHOICES = [
+        ('vendor', 'Vendor Sale'),
+        ('customer', 'Customer Sale'),
+    ]
+    
     name = models.CharField(max_length=200, help_text="Name of the equipment sale")
     vendor = models.CharField(max_length=200, blank=True, help_text="Vendor name (optional)")
+    sale_type = models.CharField(
+        max_length=10,
+        choices=SALE_TYPE_CHOICES,
+        default='vendor',
+        help_text="Type of sale - Vendor or Customer"
+    )
     quantity = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
         help_text="Quantity of equipment to be sold"
@@ -23,7 +35,17 @@ class EquipmentSale(models.Model):
     milestone_structure = models.ForeignKey(
         PaymentMilestoneStructure,
         on_delete=models.CASCADE,
-        help_text="Payment milestone structure to use for this sale"
+        null=True,
+        blank=True,
+        help_text="Payment milestone structure to use for this sale (can be assigned later)"
+    )
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='equipment_sales',
+        help_text="Project this sale belongs to (optional)"
     )
     project_start_date = models.DateField(
         help_text="Date when the project commences (day 0 for milestone calculations)"
@@ -46,7 +68,11 @@ class EquipmentSale(models.Model):
         """
         Generate milestone schedule data for gantt chart.
         Returns a list of dictionaries with milestone information.
+        Returns empty list if no milestone structure is assigned.
         """
+        if not self.milestone_structure:
+            return []
+            
         milestones = self.milestone_structure.milestones.all().order_by('order')
         schedule = []
         cumulative_days = 0
@@ -76,3 +102,21 @@ class EquipmentSale(models.Model):
             cumulative_days = end_days
         
         return schedule
+    
+    def can_assign_milestone_structure(self):
+        """
+        Check if a milestone structure can be assigned to this sale.
+        Returns True if no milestone structure is currently assigned.
+        """
+        return self.milestone_structure is None
+    
+    def assign_milestone_structure(self, milestone_structure):
+        """
+        Assign a milestone structure to this sale.
+        Raises ValueError if a milestone structure is already assigned.
+        """
+        if not self.can_assign_milestone_structure():
+            raise ValueError("A milestone structure is already assigned to this sale")
+        
+        self.milestone_structure = milestone_structure
+        self.save()

@@ -4,6 +4,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from milestones.models import PaymentMilestoneStructure, PaymentMilestone
 from .models import EquipmentSale
+from .serializers import EquipmentSaleSerializer
 
 
 class EquipmentSaleModelTest(TestCase):
@@ -279,3 +280,174 @@ class EquipmentSaleIntegrationTest(TestCase):
         
         self.assertEqual(schedule1[0]['payment_amount'], 1000.0)
         self.assertEqual(schedule2[0]['payment_amount'], 2000.0)
+
+
+class EquipmentSaleMilestoneAssignmentTest(TestCase):
+    """Test cases for milestone assignment functionality."""
+    
+    def setUp(self):
+        """Set up test data."""
+        # Create a milestone structure
+        self.structure = PaymentMilestoneStructure.objects.create(
+            name="Test Structure",
+            description="A test milestone structure"
+        )
+        
+        # Create milestones
+        PaymentMilestone.objects.create(
+            structure=self.structure,
+            name="Down Payment",
+            payment_percentage=Decimal('30.00'),
+            net_terms_days=0,
+            days_after_previous=0,
+            order=0
+        )
+        
+        PaymentMilestone.objects.create(
+            structure=self.structure,
+            name="Final Payment",
+            payment_percentage=Decimal('70.00'),
+            net_terms_days=30,
+            days_after_previous=30,
+            order=1
+        )
+        
+        # Create equipment sale without milestone structure
+        self.equipment_sale = EquipmentSale.objects.create(
+            name="Test Equipment Sale",
+            vendor="Test Vendor",
+            quantity=5,
+            total_amount=Decimal('100000.00'),
+            milestone_structure=None,  # No milestone structure initially
+            project_start_date=date.today()
+        )
+    
+    def test_can_assign_milestone_structure_when_none(self):
+        """Test that milestone structure can be assigned when none exists."""
+        self.assertTrue(self.equipment_sale.can_assign_milestone_structure())
+    
+    def test_can_assign_milestone_structure_when_exists(self):
+        """Test that milestone structure cannot be assigned when one already exists."""
+        # Assign a milestone structure
+        self.equipment_sale.milestone_structure = self.structure
+        self.equipment_sale.save()
+        
+        self.assertFalse(self.equipment_sale.can_assign_milestone_structure())
+    
+    def test_assign_milestone_structure_success(self):
+        """Test successful milestone structure assignment."""
+        self.equipment_sale.assign_milestone_structure(self.structure)
+        
+        # Refresh from database
+        self.equipment_sale.refresh_from_db()
+        
+        self.assertEqual(self.equipment_sale.milestone_structure, self.structure)
+        self.assertFalse(self.equipment_sale.can_assign_milestone_structure())
+    
+    def test_assign_milestone_structure_when_already_assigned(self):
+        """Test that assigning milestone structure fails when one already exists."""
+        # Assign a milestone structure first
+        self.equipment_sale.milestone_structure = self.structure
+        self.equipment_sale.save()
+        
+        # Try to assign another one
+        with self.assertRaises(ValueError) as context:
+            self.equipment_sale.assign_milestone_structure(self.structure)
+        
+        self.assertIn("already assigned", str(context.exception))
+    
+    def test_get_milestone_schedule_without_structure(self):
+        """Test that milestone schedule returns empty list when no structure is assigned."""
+        schedule = self.equipment_sale.get_milestone_schedule()
+        self.assertEqual(schedule, [])
+    
+    def test_get_milestone_schedule_after_assignment(self):
+        """Test that milestone schedule works after assignment."""
+        self.equipment_sale.assign_milestone_structure(self.structure)
+        
+        schedule = self.equipment_sale.get_milestone_schedule()
+        self.assertEqual(len(schedule), 2)
+        
+        # Verify first milestone
+        first_milestone = schedule[0]
+        self.assertEqual(first_milestone['name'], 'Down Payment')
+        self.assertEqual(first_milestone['payment_percentage'], 30.0)
+        self.assertEqual(first_milestone['payment_amount'], 30000.0)
+        
+        # Verify second milestone
+        second_milestone = schedule[1]
+        self.assertEqual(second_milestone['name'], 'Final Payment')
+        self.assertEqual(second_milestone['payment_percentage'], 70.0)
+        self.assertEqual(second_milestone['payment_amount'], 70000.0)
+    
+    def test_equipment_sale_creation_without_milestone_structure(self):
+        """Test creating equipment sale without milestone structure."""
+        sale = EquipmentSale.objects.create(
+            name="No Milestone Sale",
+            quantity=1,
+            total_amount=Decimal('50000.00'),
+            milestone_structure=None,
+            project_start_date=date.today()
+        )
+        
+        self.assertIsNone(sale.milestone_structure)
+        self.assertTrue(sale.can_assign_milestone_structure())
+        self.assertEqual(sale.get_milestone_schedule(), [])
+
+
+class EquipmentSaleSerializerTest(TestCase):
+    """Test cases for EquipmentSaleSerializer validation issues."""
+    
+    def test_serializer_with_empty_milestone_structure_id(self):
+        """Test serializer validation with empty milestone_structure_id."""
+        data = {
+            'name': 'Test Sale',
+            'quantity': 1,
+            'total_amount': 1000.00,
+            'milestone_structure_id': '',  # Empty string
+            'project_start_date': date.today().isoformat()
+        }
+        
+        serializer = EquipmentSaleSerializer(data=data)
+        print(f"Serializer is_valid: {serializer.is_valid()}")
+        if not serializer.is_valid():
+            print(f"Validation errors: {serializer.errors}")
+        
+        # This should pass - milestone_structure_id should be allowed to be empty
+        self.assertTrue(serializer.is_valid())
+    
+    def test_serializer_without_milestone_structure_id(self):
+        """Test serializer validation without milestone_structure_id field."""
+        data = {
+            'name': 'Test Sale',
+            'quantity': 1,
+            'total_amount': 1000.00,
+            'project_start_date': date.today().isoformat()
+            # No milestone_structure_id field at all
+        }
+        
+        serializer = EquipmentSaleSerializer(data=data)
+        print(f"Serializer is_valid (no field): {serializer.is_valid()}")
+        if not serializer.is_valid():
+            print(f"Validation errors: {serializer.errors}")
+        
+        # This should pass - milestone_structure_id should be optional
+        self.assertTrue(serializer.is_valid())
+    
+    def test_serializer_with_null_milestone_structure_id(self):
+        """Test serializer validation with null milestone_structure_id."""
+        data = {
+            'name': 'Test Sale',
+            'quantity': 1,
+            'total_amount': 1000.00,
+            'milestone_structure_id': None,  # Explicitly None
+            'project_start_date': date.today().isoformat()
+        }
+        
+        serializer = EquipmentSaleSerializer(data=data)
+        print(f"Serializer is_valid (None): {serializer.is_valid()}")
+        if not serializer.is_valid():
+            print(f"Validation errors: {serializer.errors}")
+        
+        # This should pass - milestone_structure_id should be allowed to be None
+        self.assertTrue(serializer.is_valid())

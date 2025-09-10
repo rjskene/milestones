@@ -313,3 +313,151 @@ class EquipmentSaleAPITest(APITestCase):
         expected_amounts = [100000, 150000, 150000, 100000]  # 20%, 30%, 30%, 20%
         for i, milestone in enumerate(schedule):
             self.assertEqual(milestone['payment_amount'], expected_amounts[i])
+
+
+class EquipmentSaleMilestoneAssignmentAPITest(APITestCase):
+    """Test cases for milestone assignment API endpoint."""
+    
+    def setUp(self):
+        """Set up test data."""
+        # Create a milestone structure
+        self.structure = PaymentMilestoneStructure.objects.create(
+            name='Test Structure',
+            description='A test milestone structure'
+        )
+        
+        # Create milestones
+        PaymentMilestone.objects.create(
+            structure=self.structure,
+            name='Down Payment',
+            payment_percentage=Decimal('30.00'),
+            net_terms_days=0,
+            days_after_previous=0,
+            order=0
+        )
+        
+        PaymentMilestone.objects.create(
+            structure=self.structure,
+            name='Final Payment',
+            payment_percentage=Decimal('70.00'),
+            net_terms_days=30,
+            days_after_previous=30,
+            order=1
+        )
+        
+        # Create equipment sale without milestone structure
+        self.equipment_sale = EquipmentSale.objects.create(
+            name='Test Equipment Sale',
+            vendor='Test Vendor',
+            quantity=5,
+            total_amount=Decimal('100000.00'),
+            milestone_structure=None,  # No milestone structure initially
+            project_start_date=date.today()
+        )
+    
+    def test_assign_milestone_structure_success(self):
+        """Test successful milestone structure assignment via API."""
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': self.equipment_sale.pk})
+        data = {'milestone_structure_id': self.structure.id}
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify the sale was updated
+        self.equipment_sale.refresh_from_db()
+        self.assertEqual(self.equipment_sale.milestone_structure, self.structure)
+        self.assertFalse(self.equipment_sale.can_assign_milestone_structure())
+        
+        # Verify response data
+        self.assertEqual(response.data['id'], self.equipment_sale.id)
+        self.assertEqual(response.data['milestone_structure']['id'], self.structure.id)
+        self.assertFalse(response.data['can_assign_milestone'])
+    
+    def test_assign_milestone_structure_already_assigned(self):
+        """Test milestone structure assignment when one already exists."""
+        # First assign a milestone structure
+        self.equipment_sale.milestone_structure = self.structure
+        self.equipment_sale.save()
+        
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': self.equipment_sale.pk})
+        data = {'milestone_structure_id': self.structure.id}
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('already assigned', response.data['detail'])
+    
+    def test_assign_milestone_structure_nonexistent_sale(self):
+        """Test milestone structure assignment with nonexistent sale."""
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': 99999})
+        data = {'milestone_structure_id': self.structure.id}
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_assign_milestone_structure_nonexistent_structure(self):
+        """Test milestone structure assignment with nonexistent structure."""
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': self.equipment_sale.pk})
+        data = {'milestone_structure_id': 99999}
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('does not exist', str(response.data['milestone_structure_id']))
+    
+    def test_assign_milestone_structure_missing_data(self):
+        """Test milestone structure assignment with missing data."""
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': self.equipment_sale.pk})
+        data = {}  # Missing milestone_structure_id
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('milestone_structure_id', response.data)
+    
+    def test_assign_milestone_structure_invalid_data(self):
+        """Test milestone structure assignment with invalid data."""
+        url = reverse('equipmentsale-assign-milestone', kwargs={'pk': self.equipment_sale.pk})
+        data = {'milestone_structure_id': 'invalid'}  # Invalid ID
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_create_equipment_sale_without_milestone_structure(self):
+        """Test creating equipment sale without milestone structure."""
+        sale_data = {
+            'name': 'No Milestone Sale',
+            'quantity': 1,
+            'total_amount': 50000.00,
+            'project_start_date': date.today().isoformat()
+            # No milestone_structure_id provided
+        }
+        
+        url = reverse('equipmentsale-list')
+        response = self.client.post(url, sale_data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        sale = EquipmentSale.objects.get()
+        self.assertIsNone(sale.milestone_structure)
+        self.assertTrue(sale.can_assign_milestone_structure())
+        self.assertEqual(sale.get_milestone_schedule(), [])
+        
+        # Verify response includes can_assign_milestone field
+        self.assertTrue(response.data['can_assign_milestone'])
+        self.assertIsNone(response.data['milestone_structure'])
+    
+    def test_equipment_sale_schedule_without_milestone_structure(self):
+        """Test schedule endpoint for sale without milestone structure."""
+        url = reverse('equipmentsale-schedule', kwargs={'pk': self.equipment_sale.pk})
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        data = response.data
+        self.assertEqual(data['name'], 'Test Equipment Sale')
+        self.assertEqual(data['milestone_schedule'], [])
+        self.assertIsNone(data['milestone_structure'])

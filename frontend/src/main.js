@@ -15,6 +15,7 @@ import MilestoneForm from './components/MilestoneForm.vue'
 import EquipmentSaleForm from './components/EquipmentSaleForm.vue'
 import GanttChart from './components/GanttChart.vue'
 import Dashboard from './components/Dashboard.vue'
+import Projects from './components/Projects.vue'
 
 // Create router
 const router = createRouter({
@@ -23,6 +24,7 @@ const router = createRouter({
     { path: '/', component: Dashboard },
     { path: '/milestones', component: MilestoneForm },
     { path: '/equipment', component: EquipmentSaleForm },
+    { path: '/projects', component: Projects },
     { path: '/chart', component: GanttChart },
   ]
 })
@@ -36,3 +38,4 @@ app.use(pinia)
 app.use(router)
 app.use(HighchartsVue)
 app.mount('#app')
+

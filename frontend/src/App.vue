@@ -3,13 +3,14 @@
     <nav class="navbar bg-primary">
       <div class="container d-flex justify-between align-center">
         <div class="nav-brand">
-          <h1 class="text-white m-0">Payment Milestone Tracker</h1>
+          <h1 class="text-white m-0">Milestones</h1>
         </div>
         <div class="nav-links d-flex">
           <router-link to="/" class="nav-link text-white">Dashboard</router-link>
-          <router-link to="/milestones" class="nav-link text-white">Milestone Structures</router-link>
-          <router-link to="/equipment" class="nav-link text-white">Equipment Sales</router-link>
-          <router-link to="/chart" class="nav-link text-white">Gantt Chart</router-link>
+          <router-link to="/chart" class="nav-link text-white">Gantt</router-link>
+          <router-link to="/projects" class="nav-link text-white">Projects</router-link>
+          <router-link to="/milestones" class="nav-link text-white">Milestone</router-link>
+          <router-link to="/equipment" class="nav-link text-white">Sales</router-link>
         </div>
       </div>
     </nav>
@@ -54,7 +55,7 @@
 
 .nav-link:hover,
 .nav-link.router-link-active {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .main-content {

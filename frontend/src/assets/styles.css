@@ -353,6 +353,8 @@ a:hover {
 .text-danger { color: var(--danger-color); }
 .text-warning { color: var(--warning-color); }
 .text-muted { color: var(--muted-color); }
+.text-white { color: var(--white) !important; }
+.text-black { color: var(--black) !important; }
 
 .bg-primary { background-color: var(--primary-color); }
 .bg-secondary { background-color: var(--secondary-color); }

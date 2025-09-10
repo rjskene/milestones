@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'milestones',
     'equipment',
+    'projects',
 ]
 
 MIDDLEWARE = [
