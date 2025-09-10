@@ -1,8 +1,16 @@
+import './assets/styles.css'
+
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
+
 import App from './App.vue'
-import './assets/styles.css'
+
+import HighchartsVue from 'highcharts-vue'
+import Highcharts from 'highcharts';
+import HighchartsGantt from 'highcharts/modules/gantt';
+typeof HighchartsGantt === 'function' && HighchartsGantt(Highcharts);
+
 import MilestoneForm from './components/MilestoneForm.vue'
 import EquipmentSaleForm from './components/EquipmentSaleForm.vue'
 import GanttChart from './components/GanttChart.vue'
@@ -26,4 +34,5 @@ const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
 app.use(router)
+app.use(HighchartsVue)
 app.mount('#app')

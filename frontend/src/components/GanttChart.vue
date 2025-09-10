@@ -45,8 +45,8 @@
       </div>
 
       <!-- Gantt Chart -->
-      <div ref="chartContainer" class="chart"></div>
-
+      <highcharts :constructorType="'ganttChart'" class="chart" :options="ganttOptions" ref="chartContainer"></highcharts>
+      
       <!-- Schedule Summary -->
       <div class="schedule-summary">
         <h4>Payment Schedule Summary</h4>
@@ -83,17 +83,14 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import Highcharts from 'highcharts'
-import HighchartsGantt from 'highcharts/modules/gantt'
 import { useEquipmentStore } from '../stores/equipmentStore'
-
-// Initialize Highcharts Gantt module
-HighchartsGantt(Highcharts)
 
 const route = useRoute()
 const equipmentStore = useEquipmentStore()
 
 const chartContainer = ref(null)
+const ganttOptions = ref(null)
+
 const selectedSaleId = ref('')
 const loading = ref(false)
 const error = ref(null)
@@ -147,7 +144,6 @@ const refreshChart = () => {
 }
 
 const createGanttChart = () => {
-  if (!chartContainer.value || !scheduleData.value) return
 
   const milestones = scheduleData.value.milestone_schedule
   const projectStartDate = new Date(scheduleData.value.project_start_date)
@@ -168,14 +164,16 @@ const createGanttChart = () => {
       color: getMilestoneColor(index)
     }
   })
-
   // Create the chart
-  Highcharts.ganttChart(chartContainer.value, {
+  ganttOptions.value = {
     title: {
       text: 'Payment Milestone Timeline'
     },
     subtitle: {
       text: `${selectedSale.value.name} - Payment Schedule`
+    },
+    accessibility: {
+      enabled: false
     },
     xAxis: {
       type: 'datetime',
@@ -184,8 +182,6 @@ const createGanttChart = () => {
       }
     },
     yAxis: {
-      type: 'category',
-      categories: milestones.map(m => m.name),
       title: {
         text: 'Milestones'
       }
@@ -228,7 +224,7 @@ const createGanttChart = () => {
     legend: {
       enabled: false
     }
-  })
+  }
 }
 
 const getMilestoneColor = (index) => {
