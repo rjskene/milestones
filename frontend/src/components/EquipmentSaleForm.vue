@@ -119,10 +119,10 @@
         </div>
 
         <!-- Milestone Structure Preview -->
-        <div v-if="selectedMilestoneStructure" class="milestone-preview">
-          <h4>Selected Milestone Structure: {{ selectedMilestoneStructure.name }}</h4>
+        <div v-if="selectedMilestoneStructureForForm" class="milestone-preview">
+          <h4>Selected Milestone Structure: {{ selectedMilestoneStructureForForm.name }}</h4>
           <div class="milestones-list">
-            <div v-for="milestone in selectedMilestoneStructure.milestones" :key="milestone.id" class="milestone-item">
+            <div v-for="milestone in selectedMilestoneStructureForForm.milestones" :key="milestone.id" class="milestone-item">
               <div class="milestone-info">
                 <span class="milestone-name">{{ milestone.name }}</span>
                 <span class="milestone-details">
@@ -174,7 +174,14 @@
           <div class="sale-details-row">
             <div class="detail-item">
               <label>Milestone Structure:</label>
-              <span v-if="sale.milestone_structure">{{ sale.milestone_structure.name }}</span>
+              <span 
+                v-if="sale.milestone_structure" 
+                @click="viewMilestoneStructureDetails(sale.milestone_structure)" 
+                class="milestone-structure-clickable"
+                title="Click to view milestone details"
+              >
+                {{ sale.milestone_structure.name }}
+              </span>
               <span v-else class="no-milestone">No milestone structure assigned</span>
             </div>
             <div class="detail-item">
@@ -217,6 +224,65 @@
       @close="closeMilestoneModal"
       @assigned="onMilestoneAssigned"
     />
+
+    <!-- Milestone Structure Details Modal -->
+    <div v-if="showMilestoneStructureDetails" class="modal-overlay" @click="closeMilestoneStructureDetails">
+      <div class="modal-content" @click.stop>
+        <div class="milestone-structure-details-form">
+          <div class="form-header">
+            <h3>{{ selectedMilestoneStructure?.name }} - Milestone Details</h3>
+            <button @click="closeMilestoneStructureDetails" class="btn-close">×</button>
+          </div>
+          <div class="form-content">
+            <div v-if="selectedMilestoneStructure" class="milestone-structure-info">
+              <div class="structure-summary">
+                <div class="info-row">
+                  <label>Structure Name:</label>
+                  <span>{{ selectedMilestoneStructure.name }}</span>
+                </div>
+                <div class="info-row">
+                  <label>Total Milestones:</label>
+                  <span>{{ selectedMilestoneStructure.milestones?.length || 0 }}</span>
+                </div>
+                <div class="info-row">
+                  <label>Total Percentage:</label>
+                  <span>{{ selectedMilestoneStructure.milestones?.reduce((sum, m) => sum + (m.payment_percentage || 0), 0) || 0 }}%</span>
+                </div>
+              </div>
+              
+              <div class="milestones-list">
+                <h4>Milestone Breakdown</h4>
+                <div v-if="selectedMilestoneStructure.milestones?.length > 0" class="milestones-table">
+                  <div class="milestones-header">
+                    <span>Milestone Name</span>
+                    <span>Payment %</span>
+                    <span>Days After Previous</span>
+                    <span>Net Terms</span>
+                  </div>
+                  <div 
+                    v-for="milestone in selectedMilestoneStructure.milestones" 
+                    :key="milestone.id" 
+                    class="milestones-row"
+                  >
+                    <span class="milestone-name">{{ milestone.name }}</span>
+                    <span class="milestone-percentage">{{ milestone.payment_percentage }}%</span>
+                    <span class="milestone-days">{{ milestone.days_after_previous }} days</span>
+                    <span class="milestone-terms">{{ milestone.net_terms_days || 0 }} days</span>
+                  </div>
+                </div>
+                <div v-else class="no-milestones">
+                  <p>No milestones defined for this structure.</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="form-actions">
+              <button @click="closeMilestoneStructureDetails" class="btn-secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -259,6 +325,10 @@ const error = ref(null)
 const showMilestoneModal = ref(false)
 const selectedSaleForMilestone = ref(null)
 
+// Milestone structure details modal states
+const showMilestoneStructureDetails = ref(false)
+const selectedMilestoneStructure = ref(null)
+
 const milestoneStructures = ref([])
 const equipmentSales = ref([])
 const projects = ref([])
@@ -274,7 +344,7 @@ const formData = reactive({
   project_start_date: new Date().toISOString().split('T')[0]
 })
 
-const selectedMilestoneStructure = computed(() => {
+const selectedMilestoneStructureForForm = computed(() => {
   return milestoneStructures.value.find(s => s.id === formData.milestone_structure_id)
 })
 
@@ -435,6 +505,17 @@ const closeMilestoneModal = () => {
 const onMilestoneAssigned = async () => {
   await loadSales()
   closeMilestoneModal()
+}
+
+// Milestone structure details methods
+const viewMilestoneStructureDetails = (milestoneStructure) => {
+  selectedMilestoneStructure.value = milestoneStructure
+  showMilestoneStructureDetails.value = true
+}
+
+const closeMilestoneStructureDetails = () => {
+  showMilestoneStructureDetails.value = false
+  selectedMilestoneStructure.value = null
 }
 
 onMounted(() => {
@@ -732,5 +813,219 @@ onMounted(() => {
   margin-top: 0.25rem;
   color: #7f8c8d;
   font-size: 0.875rem;
+}
+
+/* Milestone Structure Clickable */
+.milestone-structure-clickable {
+  color: #3498db;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.milestone-structure-clickable:hover {
+  color: #2980b9;
+}
+
+.no-milestone {
+  color: #e74c3c;
+  font-style: italic;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Milestone Structure Details Modal */
+.milestone-structure-details-form {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.milestone-structure-details-form .form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.milestone-structure-details-form .form-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.milestone-structure-details-form .form-content {
+  padding: 1.5rem;
+}
+
+.milestone-structure-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.structure-summary {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.structure-summary .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.structure-summary .info-row:last-child {
+  border-bottom: none;
+}
+
+.structure-summary .info-row label {
+  font-weight: 500;
+  color: #2c3e50;
+  min-width: 150px;
+}
+
+.structure-summary .info-row span {
+  color: #7f8c8d;
+  text-align: right;
+}
+
+.milestones-list h4 {
+  color: #2c3e50;
+  margin: 0 0 1rem 0;
+}
+
+.milestones-table {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.milestones-header {
+  display: contents;
+}
+
+.milestones-header span {
+  font-weight: 600;
+  color: #2c3e50;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.milestones-row {
+  display: contents;
+}
+
+.milestones-row span {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #e9ecef;
+  text-align: center;
+}
+
+.milestones-row .milestone-name {
+  text-align: left !important;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.milestones-row .milestone-percentage {
+  color: #27ae60;
+  font-weight: 500;
+}
+
+.milestones-row .milestone-days {
+  color: #7f8c8d;
+}
+
+.milestones-row .milestone-terms {
+  color: #7f8c8d;
+}
+
+.no-milestones {
+  text-align: center;
+  padding: 2rem;
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+.milestone-structure-details-form .form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #7f8c8d;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close:hover {
+  color: #2c3e50;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .milestones-table {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .milestones-header,
+  .milestones-row {
+    display: block;
+  }
+  
+  .milestones-header span,
+  .milestones-row span {
+    display: block;
+    text-align: left;
+    border-bottom: none;
+    border-right: none;
+  }
+  
+  .milestones-header span {
+    background: #f8f9fa;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
 }
 </style>

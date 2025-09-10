@@ -172,14 +172,6 @@
         <!-- Projects View - Horizontal Table -->
         <div v-else-if="viewMode === 'projects'" class="equipment-sales-table">
           <div class="sales-header">
-            <span class="checkbox-column">
-              <input 
-                type="checkbox" 
-                :checked="selectAllEquipmentSales" 
-                @change="toggleSelectAllEquipmentSales"
-                title="Select/Deselect All"
-              />
-            </span>
             <span>Sale Name</span>
             <span>Vendor</span>
             <span>Type</span>
@@ -194,21 +186,21 @@
             :key="sale.id" 
             class="sales-row"
           >
-            <span class="checkbox-column">
-              <input 
-                type="checkbox" 
-                :checked="selectedEquipmentSalesIds.includes(sale.id)" 
-                @change="toggleEquipmentSaleSelection(sale.id)"
-                title="Select this sale"
-              />
-            </span>
             <span class="sale-name">{{ sale.name }}</span>
             <span>{{ sale.vendor || 'N/A' }}</span>
             <span>{{ sale.sale_type }}</span>
             <span>{{ sale.quantity }}</span>
             <span class="amount">{{ formatCurrency(sale.unit_price) }}</span>
             <span class="amount">{{ formatCurrency(sale.total_amount) }}</span>
-            <span>{{ sale.milestone_structure?.name || 'None' }}</span>
+            <span 
+              v-if="sale.milestone_structure" 
+              @click="viewMilestoneStructureDetails(sale.milestone_structure)" 
+              class="milestone-structure-clickable"
+              title="Click to view milestone details"
+            >
+              {{ sale.milestone_structure.name }}
+            </span>
+            <span v-else class="no-milestone">None</span>
             <span class="sale-actions">
               <button @click="editEquipmentSaleFromProjects(sale)" class="btn-edit-small" title="Edit sale">
                 ✏️
@@ -240,41 +232,6 @@
         </div>
       </div>
 
-      <!-- Schedule Summary -->
-      <div class="schedule-summary">
-        <h4>Payment Schedule Summary</h4>
-        <div class="summary-table">
-          <div class="summary-header">
-            <span>Milestone</span>
-            <span v-if="viewMode === 'projects'">Equipment Sale</span>
-            <span>Due Date</span>
-            <span>Payment Due</span>
-            <span>Amount</span>
-            <span>Percentage</span>
-            <span>Actions</span>
-          </div>
-          <div 
-            v-for="milestone in (filteredChartData?.milestone_schedule || filteredChartData?.project_timeline || chartData?.milestone_schedule || chartData?.project_timeline || [])" 
-            :key="`${milestone.sale_id || ''}-${milestone.milestone_id || milestone.id}`" 
-            class="summary-row"
-          >
-            <span class="milestone-name">{{ milestone.milestone_name || milestone.name || 'Unnamed Milestone' }}</span>
-            <span v-if="viewMode === 'projects'" class="sale-name">{{ milestone.sale_name || 'Unknown Sale' }}</span>
-            <span>{{ formatDate(milestone.due_date) }}</span>
-            <span>{{ formatDate(milestone.payment_due_date) }}</span>
-            <span class="amount">{{ formatCurrency(milestone.payment_amount) }}</span>
-            <span>{{ milestone.payment_percentage || 0 }}%</span>
-            <span class="milestone-actions">
-              <button @click="editMilestoneDetails(milestone)" class="btn-edit-small" title="Edit milestone">
-                ✏️
-              </button>
-              <button @click="viewMilestoneDetails(milestone)" class="btn-info-small" title="View details">
-                👁️
-              </button>
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Error Message -->
@@ -475,6 +432,65 @@
         />
       </div>
     </div>
+
+    <!-- Milestone Structure Details Modal -->
+    <div v-if="showMilestoneStructureDetails" class="modal-overlay" @click="closeMilestoneStructureDetails">
+      <div class="modal-content" @click.stop>
+        <div class="milestone-structure-details-form">
+          <div class="form-header">
+            <h3>{{ selectedMilestoneStructure?.name }} - Milestone Details</h3>
+            <button @click="closeMilestoneStructureDetails" class="btn-close">×</button>
+          </div>
+          <div class="form-content">
+            <div v-if="selectedMilestoneStructure" class="milestone-structure-info">
+              <div class="structure-summary">
+                <div class="info-row">
+                  <label>Structure Name:</label>
+                  <span>{{ selectedMilestoneStructure.name }}</span>
+                </div>
+                <div class="info-row">
+                  <label>Total Milestones:</label>
+                  <span>{{ selectedMilestoneStructure.milestones?.length || 0 }}</span>
+                </div>
+                <div class="info-row">
+                  <label>Total Percentage:</label>
+                  <span>{{ selectedMilestoneStructure.milestones?.reduce((sum, m) => sum + (m.payment_percentage || 0), 0) || 0 }}%</span>
+                </div>
+              </div>
+              
+              <div class="milestones-list">
+                <h4>Milestone Breakdown</h4>
+                <div v-if="selectedMilestoneStructure.milestones?.length > 0" class="milestones-table">
+                  <div class="milestones-header">
+                    <span>Milestone Name</span>
+                    <span>Payment %</span>
+                    <span>Days After Previous</span>
+                    <span>Net Terms</span>
+                  </div>
+                  <div 
+                    v-for="milestone in selectedMilestoneStructure.milestones" 
+                    :key="milestone.id" 
+                    class="milestones-row"
+                  >
+                    <span class="milestone-name">{{ milestone.name }}</span>
+                    <span class="milestone-percentage">{{ milestone.payment_percentage }}%</span>
+                    <span class="milestone-days">{{ milestone.days_after_previous }} days</span>
+                    <span class="milestone-terms">{{ milestone.net_terms_days || 0 }} days</span>
+                  </div>
+                </div>
+                <div v-else class="no-milestones">
+                  <p>No milestones defined for this structure.</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="form-actions">
+              <button @click="closeMilestoneStructureDetails" class="btn-secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -504,8 +520,7 @@ const selectedId = ref('')
 // LocalStorage keys
 const STORAGE_KEYS = {
   VIEW_MODE: 'gantt-chart-view-mode',
-  SELECTED_ID: 'gantt-chart-selected-id',
-  SELECTED_EQUIPMENT_SALES: 'gantt-chart-selected-equipment-sales'
+  SELECTED_ID: 'gantt-chart-selected-id'
 }
 
 // Persistence functions
@@ -526,26 +541,6 @@ const loadFromLocalStorage = (key, defaultValue = '') => {
   }
 }
 
-const saveSelectedEquipmentSales = () => {
-  try {
-    localStorage.setItem(STORAGE_KEYS.SELECTED_EQUIPMENT_SALES, JSON.stringify(selectedEquipmentSalesIds.value))
-  } catch (error) {
-    console.warn('Failed to save selected equipment sales:', error)
-  }
-}
-
-const loadSelectedEquipmentSales = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_EQUIPMENT_SALES)
-    if (saved) {
-      const selectedArray = JSON.parse(saved)
-      selectedEquipmentSalesIds.value = selectedArray
-      selectAllEquipmentSales.value = selectedArray.length > 0
-    }
-  } catch (error) {
-    console.warn('Failed to load selected equipment sales:', error)
-  }
-}
 
 const updateUrlParams = () => {
   const query = {}
@@ -626,12 +621,10 @@ const milestoneEditData = ref({
   payment_due_date: ''
 })
 
-// Equipment sales selection state
-const selectedEquipmentSalesIds = ref([])
-const selectedEquipmentSales = computed(() => {
-  return equipmentSales.value.filter(sale => selectedEquipmentSalesIds.value.includes(sale.id))
-})
-const selectAllEquipmentSales = ref(false)
+// Milestone structure details modal states
+const showMilestoneStructureDetails = ref(false)
+const selectedMilestoneStructure = ref(null)
+
 
 
 
@@ -647,58 +640,8 @@ const equipmentSalesForProject = computed(() => {
   return project?.equipment_sales || []
 })
 
-// Filtered equipment sales based on selection
-const filteredEquipmentSalesForProject = computed(() => {
-  if (selectedEquipmentSalesIds.value.length === 0) {
-    return equipmentSalesForProject.value
-  }
-  return equipmentSalesForProject.value.filter(sale => selectedEquipmentSalesIds.value.includes(sale.id))
-})
 
-// Filtered chart data based on selection
-const filteredChartData = computed(() => {
-  if (!chartData.value) return null
-  
-  if (viewMode.value === 'single') {
-    return chartData.value
-  }
-  
-  // For projects view, filter milestones based on selected equipment sales
-  if (selectedEquipmentSalesIds.value.length === 0) {
-    return chartData.value
-  }
-  
-  const filteredData = { ...chartData.value }
-  if (filteredData.project_timeline && Array.isArray(filteredData.project_timeline)) {
-    filteredData.project_timeline = filteredData.project_timeline.filter(milestone => 
-      milestone.sale_id && selectedEquipmentSalesIds.value.includes(milestone.sale_id)
-    )
-  }
-  
-  return filteredData
-})
 
-// Selection management functions
-const toggleEquipmentSaleSelection = (saleId) => {
-  const index = selectedEquipmentSalesIds.value.indexOf(saleId)
-  if (index > -1) {
-    selectedEquipmentSalesIds.value.splice(index, 1)
-  } else {
-    selectedEquipmentSalesIds.value.push(saleId)
-  }
-  selectAllEquipmentSales.value = selectedEquipmentSalesIds.value.length === equipmentSalesForProject.value.length
-  saveSelectedEquipmentSales()
-}
-
-const toggleSelectAllEquipmentSales = () => {
-  if (selectAllEquipmentSales.value) {
-    selectedEquipmentSalesIds.value = []
-  } else {
-    selectedEquipmentSalesIds.value = equipmentSalesForProject.value.map(sale => sale.id)
-  }
-  selectAllEquipmentSales.value = !selectAllEquipmentSales.value
-  saveSelectedEquipmentSales()
-}
 
 const loadEquipmentSales = async () => {
   try {
@@ -1049,6 +992,17 @@ const closeMilestoneDetails = () => {
   }
 }
 
+// Milestone structure details methods
+const viewMilestoneStructureDetails = (milestoneStructure) => {
+  selectedMilestoneStructure.value = milestoneStructure
+  showMilestoneStructureDetails.value = true
+}
+
+const closeMilestoneStructureDetails = () => {
+  showMilestoneStructureDetails.value = false
+  selectedMilestoneStructure.value = null
+}
+
 const closeEditSaleModal = () => {
   showEditSaleModal.value = false
   editingItem.value = null
@@ -1118,13 +1072,12 @@ const onCreateSaleSaved = async () => {
 }
 
 const createGanttChart = () => {
-  const dataToUse = filteredChartData.value || chartData.value
-  if (!dataToUse) return
+  if (!chartData.value) return
   
-  const milestones = dataToUse.milestone_schedule || dataToUse.project_timeline
+  const milestones = chartData.value.milestone_schedule || chartData.value.project_timeline
   if (!milestones || !Array.isArray(milestones)) return
   
-  const startDate = new Date(dataToUse.start_date || dataToUse.project_start_date)
+  const startDate = new Date(chartData.value.start_date || chartData.value.project_start_date)
 
   // Group milestones by equipment sale
   const groupedBySale = {}
@@ -1287,29 +1240,6 @@ const getMilestoneColor = (index) => {
   return colors[index % colors.length]
 }
 
-// Watch for changes in equipment sales selection to update select all checkbox
-watch([selectedEquipmentSalesIds, equipmentSalesForProject], () => {
-  selectAllEquipmentSales.value = selectedEquipmentSalesIds.value.length > 0 && 
-    selectedEquipmentSalesIds.value.length === equipmentSalesForProject.value.length
-}, { deep: true })
-
-// Watch for changes in filtered chart data to update the Gantt chart
-watch(filteredChartData, () => {
-  if (filteredChartData.value && selectedId.value && chartData.value) {
-    nextTick(() => {
-      createGanttChart()
-    })
-  }
-}, { deep: true })
-
-// Watch for changes in equipment sales selection to update the chart
-watch(selectedEquipmentSalesIds, () => {
-  if (selectedId.value && viewMode.value === 'projects' && chartData.value) {
-    nextTick(() => {
-      createGanttChart()
-    })
-  }
-}, { deep: true })
 
 onMounted(async () => {
   await Promise.all([
@@ -1317,9 +1247,6 @@ onMounted(async () => {
     loadProjects(),
     loadMilestoneStructures()
   ])
-  
-  // Load saved selections
-  loadSelectedEquipmentSales()
   
   // Check URL parameters first (highest priority)
   const saleId = route.query.sale
@@ -1566,7 +1493,7 @@ onMounted(async () => {
 
 .equipment-sales-table {
   display: grid;
-  grid-template-columns: 0.5fr 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 1fr;
   gap: 0.5rem;
   overflow-x: auto;
 }
@@ -1594,16 +1521,6 @@ onMounted(async () => {
   text-align: center;
 }
 
-.checkbox-column {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.checkbox-column input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
-}
 
 .sale-name {
   text-align: left !important;
@@ -1672,58 +1589,6 @@ onMounted(async () => {
 
 .add-text {
   font-size: 0.9rem;
-}
-
-.schedule-summary {
-  padding: 1.5rem;
-  border-top: 1px solid #e9ecef;
-}
-
-.schedule-summary h4 {
-  color: #2c3e50;
-  margin: 0 0 1rem 0;
-}
-
-.summary-table {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
-  gap: 0.5rem;
-  overflow-x: auto;
-}
-
-.summary-header {
-  display: contents;
-}
-
-.summary-header span {
-  font-weight: 600;
-  color: #2c3e50;
-  padding: 0.5rem;
-  background: #f8f9fa;
-  border-radius: 4px;
-  text-align: center;
-}
-
-.summary-row {
-  display: contents;
-}
-
-.summary-row span {
-  padding: 0.75rem 0.5rem;
-  border-bottom: 1px solid #e9ecef;
-  text-align: center;
-}
-
-.milestone-name {
-  text-align: left !important;
-  font-weight: 500;
-  color: #2c3e50;
-}
-
-.sale-name {
-  text-align: left !important;
-  font-style: italic;
-  color: #7f8c8d;
 }
 
 .amount {
@@ -1862,29 +1727,6 @@ onMounted(async () => {
     padding: 0.75rem 1rem;
   }
 
-  .summary-table {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  
-  .summary-header,
-  .summary-row {
-    display: block;
-  }
-  
-  .summary-header span,
-  .summary-row span {
-    display: block;
-    text-align: left;
-    border-bottom: none;
-    border-right: none;
-  }
-  
-  .summary-header span {
-    background: #f8f9fa;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-  }
 }
 
 /* Quick Actions Panel */
@@ -2177,6 +2019,153 @@ onMounted(async () => {
   background-color: #95a5a6;
 }
 
+/* Milestone Structure Clickable */
+.milestone-structure-clickable {
+  color: #3498db;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.milestone-structure-clickable:hover {
+  color: #2980b9;
+}
+
+.no-milestone {
+  color: #e74c3c;
+  font-style: italic;
+}
+
+/* Milestone Structure Details Modal */
+.milestone-structure-details-form {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.milestone-structure-details-form .form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.milestone-structure-details-form .form-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.milestone-structure-details-form .form-content {
+  padding: 1.5rem;
+}
+
+.milestone-structure-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.structure-summary {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.structure-summary .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.structure-summary .info-row:last-child {
+  border-bottom: none;
+}
+
+.structure-summary .info-row label {
+  font-weight: 500;
+  color: #2c3e50;
+  min-width: 150px;
+}
+
+.structure-summary .info-row span {
+  color: #7f8c8d;
+  text-align: right;
+}
+
+.milestones-list h4 {
+  color: #2c3e50;
+  margin: 0 0 1rem 0;
+}
+
+.milestones-table {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.milestones-header {
+  display: contents;
+}
+
+.milestones-header span {
+  font-weight: 600;
+  color: #2c3e50;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.milestones-row {
+  display: contents;
+}
+
+.milestones-row span {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #e9ecef;
+  text-align: center;
+}
+
+.milestones-row .milestone-name {
+  text-align: left !important;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.milestones-row .milestone-percentage {
+  color: #27ae60;
+  font-weight: 500;
+}
+
+.milestones-row .milestone-days {
+  color: #7f8c8d;
+}
+
+.milestones-row .milestone-terms {
+  color: #7f8c8d;
+}
+
+.no-milestones {
+  text-align: center;
+  padding: 2rem;
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+.milestone-structure-details-form .form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .quick-actions-grid {
@@ -2200,6 +2189,30 @@ onMounted(async () => {
   .action-buttons {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .milestones-table {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .milestones-header,
+  .milestones-row {
+    display: block;
+  }
+  
+  .milestones-header span,
+  .milestones-row span {
+    display: block;
+    text-align: left;
+    border-bottom: none;
+    border-right: none;
+  }
+  
+  .milestones-header span {
+    background: #f8f9fa;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
   }
 }
 </style>
